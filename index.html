@@ -95,7 +95,7 @@ function esc(value){return String(value).replace(/[&<>"']/g,function(ch){return 
 function read(key,fallback){try{var v=JSON.parse(localStorage.getItem('nexus-preview-'+key));return Array.isArray(v)?v:(fallback||[])}catch(e){return fallback||[]}}
 function write(key,value){try{localStorage.setItem('nexus-preview-'+key,JSON.stringify(value));return true}catch(e){showToast('Browser storage is full or unavailable');return false}}
 var chambers=read('chambers'),outgoing=read('requests'),chamberMessages=read('messages');
-var activePage='home',friendTab='all',chamberView='mine',selectedChamber=null,selectedChannel='general';
+var activePage='home',friendTab='all',chamberView='mine',selectedChamber=null,selectedChannel='general',searchQuery='';
 var profileName=localStorage.getItem('nexus-preview-profile')||'Admin Preview';
 var navItems=[['home','Home','home'],['friends','Friends','friends'],['chambers','Chambers','chambers'],['messages','Messages','messages'],['settings','Settings','settings']];
 function showToast(message){var root=$('#toastRoot');root.innerHTML='<div class="toast">'+esc(message)+'</div>';window.clearTimeout(showToast.timer);showToast.timer=window.setTimeout(function(){root.innerHTML=''},2500)}
@@ -122,11 +122,12 @@ if(!chamber.channels.includes(selectedChannel))selectedChannel=chamber.channels[
 var messages=chamberMessages.filter(function(message){return message.chamberId===chamber.id&&message.channel===selectedChannel});
 var tabs=chamber.channels.map(function(channel){return '<button class="channel-pill '+(channel===selectedChannel?'active':'')+'" data-channel="'+esc(channel)+'"># '+esc(channel)+'</button>'}).join('');
 var feed=messages.length?messages.map(function(message){var date=new Date(message.createdAt);var stamp=isNaN(date.getTime())?'':date.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});return '<article class="chat-line"><div class="chat-avatar">'+esc((message.author||'A').slice(0,1).toUpperCase())+'</div><div class="chat-copy"><div class="chat-meta"><b>'+esc(message.author||profileName)+'</b><time>'+esc(stamp)+'</time></div><div class="chat-body">'+esc(message.body)+'</div></div></article>'}).join(''):'<div class="chat-empty">No messages here yet</div>';
-return '<div class="section-head"><div><h2>'+esc(chamber.name)+'</h2><p>'+esc(chamber.description||'Your Chamber')+'</p></div><div style="display:flex;gap:8px"><button class="outline-btn" data-action="create-channel">'+ico('plus')+'Channel</button><button class="outline-btn" data-action="back-chambers">Back</button></div></div><div class="channel-strip">'+tabs+'</div><section class="chamber-room"><div class="room-top"><strong># '+esc(selectedChannel)+'</strong><span>'+messages.length+' messages</span></div><div class="chat-feed" id="chatFeed">'+feed+'</div><form class="chat-compose" id="chatForm"><input id="chatMessage" maxlength="1200" autocomplete="off" required placeholder="Message # '+esc(selectedChannel)+'" aria-label="Message '+esc(selectedChannel)+'"><button class="small-red" type="submit">Send</button></form></section>';
+return '<div class="section-head"><div><h2>'+esc(chamber.name)+'</h2><p>'+esc(chamber.description||'Your Chamber')+'</p></div><div style="display:flex;gap:8px"><button class="outline-btn" data-action="manage-chamber">Manage</button><button class="outline-btn" data-action="create-channel">'+ico('plus')+'Channel</button><button class="outline-btn" data-action="back-chambers">Back</button></div></div><div class="channel-strip">'+tabs+'</div><section class="chamber-room"><div class="room-top"><strong># '+esc(selectedChannel)+'</strong><span>'+messages.length+' messages</span></div><div class="chat-feed" id="chatFeed">'+feed+'</div><form class="chat-compose" id="chatForm"><input id="chatMessage" maxlength="1200" autocomplete="off" required placeholder="Message # '+esc(selectedChannel)+'" aria-label="Message '+esc(selectedChannel)+'"><button class="small-red" type="submit">Send</button></form></section>';
 }
 function renderChambers(){
 if(selectedChamber){var selected=chambers.find(function(chamber){return chamber.id===selectedChamber});if(selected)return renderChamberDetail(selected);selectedChamber=null}
-var cards=chambers.length?'<div class="chamber-grid">'+chambers.map(chamberCard).join('')+'<button class="create-card" data-action="create-chamber"><span class="create-plus">+</span>Create Chamber</button></div>':emptyState('chambers','No Chambers yet','Your Chambers will appear here.','Create Chamber','create-chamber');
+var shown=chambers.filter(function(chamber){var q=searchQuery.toLowerCase();return !q||chamber.name.toLowerCase().includes(q)||(chamber.description||'').toLowerCase().includes(q)||(chamber.channels||[]).some(function(channel){return channel.toLowerCase().includes(q)})});
+var cards=shown.length?'<div class="chamber-grid">'+shown.map(chamberCard).join('')+(searchQuery?'':'<button class="create-card" data-action="create-chamber"><span class="create-plus">+</span>Create Chamber</button>')+'</div>':searchQuery?emptyState('search','No Chambers found','Try a different name, description, or channel.','',''):emptyState('chambers','No Chambers yet','Your Chambers will appear here.','Create Chamber','create-chamber');
 return '<div class="section-head"><div><h2>Chambers</h2><p>Your communities, all in one place</p></div><button class="small-red" data-action="create-chamber">'+ico('plus')+'Create Chamber</button></div><div class="tabs"><button class="tab '+(chamberView==='mine'?'active':'')+'" data-chamber-tab="mine">Your Chambers</button><button class="tab '+(chamberView==='discover'?'active':'')+'" data-chamber-tab="discover">Discover</button></div>'+(chamberView==='mine'?cards:emptyState('compass','Nothing to explore yet','Public Chambers will appear here when discovery is connected.','',''));
 }
 function renderFriends(){
@@ -151,9 +152,10 @@ var html='';
 if(kind==='chamber')html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><h3 id="modalTitle">Create a Chamber</h3><button class="modal-close" data-close-modal aria-label="Close">×</button></div><form id="chamberForm"><label for="chamberName">Chamber name</label><input id="chamberName" maxlength="32" required placeholder="Name your Chamber"><label for="chamberDescription">Description (optional)</label><textarea id="chamberDescription" maxlength="120" placeholder="What is this Chamber for?"></textarea><div class="modal-actions"><button type="button" class="soft-btn" data-close-modal>Cancel</button><button class="small-red" type="submit">Create Chamber</button></div></form></div></div>';
 if(kind==='friend')html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><h3 id="modalTitle">Add a Friend</h3><button class="modal-close" data-close-modal aria-label="Close">×</button></div><form id="friendForm"><label for="friendName">Username</label><input id="friendName" maxlength="24" required placeholder="Enter a username"><div class="modal-actions"><button type="button" class="soft-btn" data-close-modal>Cancel</button><button class="small-red" type="submit">Send Request</button></div></form></div></div>';
 if(kind==='channel')html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><h3 id="modalTitle">Add a Channel</h3><button class="modal-close" data-close-modal aria-label="Close">×</button></div><form id="channelForm"><label for="channelName">Channel name</label><input id="channelName" maxlength="28" required placeholder="e.g. projects"><div class="modal-actions"><button type="button" class="soft-btn" data-close-modal>Cancel</button><button class="small-red" type="submit">Add Channel</button></div></form></div></div>';
+if(kind==='manage-chamber'){var current=chambers.find(function(item){return item.id===selectedChamber});if(current)html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><h3 id="modalTitle">Chamber settings</h3><button class="modal-close" data-close-modal aria-label="Close">×</button></div><form id="editChamberForm"><label for="editChamberName">Name</label><input id="editChamberName" maxlength="32" required value="'+esc(current.name)+'"><label for="editChamberDescription">Description</label><textarea id="editChamberDescription" maxlength="120">'+esc(current.description||'')+'</textarea><div class="modal-actions" style="justify-content:space-between"><button type="button" class="pending-cancel" data-action="delete-current-chamber">Delete Chamber</button><span style="display:flex;gap:8px"><button type="button" class="soft-btn" data-close-modal>Cancel</button><button class="small-red" type="submit">Save</button></span></div></form></div></div>'}
 if(kind==='profile')html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><h3 id="modalTitle">Edit display name</h3><button class="modal-close" data-close-modal aria-label="Close">×</button></div><form id="profileForm"><label for="displayName">Display name</label><input id="displayName" maxlength="24" required value="'+esc(profileName)+'"><div class="modal-actions"><button type="button" class="soft-btn" data-close-modal>Cancel</button><button class="small-red" type="submit">Save</button></div></form></div></div>';
 $('#modalRoot').innerHTML=html;
-var field=kind==='chamber'?'#chamberName':kind==='friend'?'#friendName':kind==='channel'?'#channelName':'#displayName';
+var field=kind==='chamber'?'#chamberName':kind==='friend'?'#friendName':kind==='channel'?'#channelName':kind==='manage-chamber'?'#editChamberName':'#displayName';
 if($(field))$(field).focus();
 }
 function closeModal(){$('#modalRoot').innerHTML=''}
@@ -172,7 +174,9 @@ var name=action.dataset.action;
 if(name==='create-chamber')openModal('chamber');
 if(name==='add-friend')openModal('friend');
 if(name==='create-channel')openModal('channel');
+if(name==='manage-chamber')openModal('manage-chamber');
 if(name==='edit-profile')openModal('profile');
+if(name==='delete-current-chamber'){var doomed=selectedChamber;if(doomed&&confirm('Delete this Chamber and its preview messages?')){chambers=chambers.filter(function(item){return item.id!==doomed});chamberMessages=chamberMessages.filter(function(message){return message.chamberId!==doomed});write('chambers',chambers);write('messages',chamberMessages);selectedChamber=null;closeModal();renderApp();showToast('Chamber deleted from this preview')}}
 if(name==='clear-preview')clearPreview();
 if(name==='back-chambers'){selectedChamber=null;renderApp()}
 if(name==='friends'){activePage='friends';renderApp()}
@@ -206,6 +210,7 @@ if(!username)return;
 if(outgoing.some(function(request){return request.name.toLowerCase()===username.toLowerCase()})){showToast('Request already exists');return}
 outgoing.unshift({name:username,id:String(Date.now())});write('requests',outgoing);closeModal();activePage='friends';friendTab='requests';renderApp();showToast('Preview request added');
 }
+if(event.target.id==='editChamberForm'){event.preventDefault();var current=chambers.find(function(item){return item.id===selectedChamber});var nextName=$('#editChamberName').value.trim();if(!current||!nextName)return;if(chambers.some(function(item){return item.id!==current.id&&item.name.toLowerCase()===nextName.toLowerCase()})){showToast('Another Chamber already uses that name');return}current.name=nextName;current.description=$('#editChamberDescription').value.trim();write('chambers',chambers);closeModal();renderApp();showToast('Chamber updated');}
 if(event.target.id==='channelForm'){
 event.preventDefault();
 var raw=$('#channelName').value.trim().toLowerCase();
@@ -237,11 +242,10 @@ document.addEventListener('keydown',function(event){if(event.key==='Escape'&&$('
 $('#requestsQuick').addEventListener('click',function(){activePage='friends';friendTab='requests';renderApp()});
 $('#globalSearch').addEventListener('keydown',function(event){
 if(event.key!=='Enter')return;
-var query=this.value.trim().toLowerCase();if(!query)return;
-var matches=chambers.filter(function(chamber){return chamber.name.toLowerCase().includes(query)||(chamber.description||'').toLowerCase().includes(query)});
-activePage='chambers';selectedChamber=null;chamberView='mine';renderApp();
-showToast(matches.length?matches.length+' matching Chamber'+(matches.length===1?'':'s'):'No Chambers match "'+query+'"');
-this.value='';
+searchQuery=this.value.trim();activePage='chambers';selectedChamber=null;chamberView='mine';renderApp();
+});
+$('#globalSearch').addEventListener('input',function(){
+if(!this.value.trim()&&searchQuery){searchQuery='';if(activePage==='chambers'&&!selectedChamber)renderApp()}
 });
 })();
 </script>
