@@ -188,7 +188,7 @@ var channelButton=event.target.closest('[data-channel]');
 if(channelButton){selectedChannel=channelButton.dataset.channel;renderApp();return}
 var cancel=event.target.closest('[data-cancel-request]');
 if(cancel){outgoing=outgoing.filter(function(request){return request.id!==cancel.dataset.cancelRequest});write('requests',outgoing);renderApp();showToast('Request removed from preview');return}
-if(event.target.closest('[data-close-modal]'))closeModal();
+if(event.target.matches('[data-close-modal]'))closeModal();
 });
 document.addEventListener('submit',function(event){
 if(event.target.id==='chamberForm'){
@@ -233,6 +233,7 @@ write('messages',chamberMessages);renderApp();
 var feed=$('#chatFeed');if(feed)feed.scrollTop=feed.scrollHeight;
 }
 });
+document.addEventListener('keydown',function(event){if(event.key==='Escape'&&$('#modalRoot').innerHTML)closeModal()});
 $('#requestsQuick').addEventListener('click',function(){activePage='friends';friendTab='requests';renderApp()});
 $('#globalSearch').addEventListener('keydown',function(event){
 if(event.key!=='Enter')return;
