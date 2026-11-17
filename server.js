@@ -444,6 +444,17 @@ app.get("/api/pockets/:id/messages", requireAuth, asyncRoute(async function (req
   }) });
 }));
 
+app.post("/api/pockets/:id/messages", requireAuth, writeLimiter, asyncRoute(async function (req, res) {
+  const access = await requirePocketAccess(req.params.id, req.user.id);
+  if (!access) return res.status(404).json({ error: "Pocket not found." });
+  const body = String(req.body.body || "").trim();
+  if (!body || body.length > 2000) return res.status(400).json({ error: "Messages must be 1–2000 characters." });
+  const result = await pool.query("INSERT INTO pocket_messages(pocket_id,user_id,body) VALUES($1,$2,$3) RETURNING id,body,created_at", [req.params.id, req.user.id, body]);
+  const message = { id: String(result.rows[0].id), body: result.rows[0].body, createdAt: result.rows[0].created_at, user: { id: req.user.id, username: req.user.username, displayName: req.user.display_name } };
+  io.to("pocket:" + req.params.id).emit("pocket:message", { pocketId: req.params.id, message: message });
+  res.status(201).json({ message: message });
+}));
+
 app.get("/api/conversations", requireAuth, asyncRoute(async function (req, res) {
   const result = await pool.query(
     "SELECT c.id,CASE WHEN c.user_one=$1 THEN u2.id ELSE u1.id END AS friend_id,CASE WHEN c.user_one=$1 THEN u2.username ELSE u1.username END AS username,CASE WHEN c.user_one=$1 THEN u2.display_name ELSE u1.display_name END AS display_name,last.body AS last_body,last.created_at AS last_at FROM dm_conversations c JOIN users u1 ON u1.id=c.user_one JOIN users u2 ON u2.id=c.user_two LEFT JOIN LATERAL (SELECT body,created_at FROM dm_messages WHERE conversation_id=c.id ORDER BY id DESC LIMIT 1) last ON true WHERE c.user_one=$1 OR c.user_two=$1 ORDER BY COALESCE(last.created_at,c.created_at) DESC",
@@ -458,6 +469,15 @@ app.post("/api/conversations", requireAuth, asyncRoute(async function (req, res)
   const id = crypto.randomUUID();
   const result = await pool.query("INSERT INTO dm_conversations(id,user_one,user_two) VALUES($1,$2,$3) ON CONFLICT(user_one,user_two) DO UPDATE SET user_one=EXCLUDED.user_one RETURNING id", [id, pair[0], pair[1]]);
   res.status(201).json({ conversationId: result.rows[0].id });
+}));
+app.post("/api/conversations/:id/messages", requireAuth, writeLimiter, asyncRoute(async function (req, res) {
+  const body = String(req.body.body || "").trim();
+  if (!body || body.length > 2000) return res.status(400).json({ error: "Messages must be 1–2000 characters." });
+  const result = await pool.query("INSERT INTO dm_messages(conversation_id,sender_id,body) SELECT $1,$2,$3 WHERE EXISTS(SELECT 1 FROM dm_conversations WHERE id=$1 AND (user_one=$2 OR user_two=$2)) RETURNING id,body,created_at", [req.params.id, req.user.id, body]);
+  if (!result.rowCount) return res.status(404).json({ error: "Conversation not found." });
+  const message = { id: String(result.rows[0].id), body: result.rows[0].body, createdAt: result.rows[0].created_at, user: { id: req.user.id, username: req.user.username, displayName: req.user.display_name } };
+  io.to("dm:" + req.params.id).emit("dm:message", { conversationId: req.params.id, message: message });
+  res.status(201).json({ message: message });
 }));
 app.get("/api/conversations/:id/messages", requireAuth, asyncRoute(async function (req, res) {
   const member = await pool.query("SELECT 1 FROM dm_conversations WHERE id=$1 AND (user_one=$2 OR user_two=$2)", [req.params.id, req.user.id]);
