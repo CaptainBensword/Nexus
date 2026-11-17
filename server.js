@@ -241,6 +241,16 @@ app.post("/api/auth/password", requireAuth, authLimiter, asyncRoute(async functi
   res.json({ ok: true });
 }));
 
+app.delete("/api/auth/account", requireAuth, authLimiter, asyncRoute(async function (req, res) {
+  const password = String(req.body.password || "");
+  const found = await pool.query("SELECT password_hash FROM users WHERE id=$1", [req.user.id]);
+  if (!found.rowCount || !(await bcrypt.compare(password, found.rows[0].password_hash))) {
+    return res.status(400).json({ error: "Your password was not correct." });
+  }
+  await pool.query("DELETE FROM users WHERE id=$1", [req.user.id]);
+  clearSessionCookie(res);
+  res.json({ ok: true });
+}));
 app.get("/api/friends", requireAuth, asyncRoute(async function (req, res) {
   const [friends, incoming, outgoing] = await Promise.all([
     pool.query("SELECT u.id,u.username,u.display_name,u.last_seen_at FROM friendships f JOIN users u ON u.id=f.friend_id WHERE f.user_id=$1 ORDER BY u.username_norm", [req.user.id]),
