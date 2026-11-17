@@ -656,7 +656,7 @@ document.addEventListener("click",function(event){
   if(friendTab){state.friendTab=friendTab.dataset.friendTab;render();return;}
   var chamberTab=event.target.closest("[data-chamber-tab]");
   if(chamberTab){state.chamberTab=chamberTab.dataset.chamberTab;if(state.chamberTab==="discover"&&!state.demo){api("/chambers/discover").then(function(result){state.discover=result.chambers||[];render();}).catch(function(error){toast(error.message);});}else render();return;}
-  if(event.target.closest("[data-close-modal]")){closeModal();return;}
+  if(event.target.classList.contains("modal-backdrop")||event.target.closest(".modal-close")||event.target.matches("button[data-close-modal]")){closeModal();return;}
   if(!event.target.closest(".emoji-popover")&&!event.target.closest("[data-action='toggle-emoji']"))closeEmoji();
 });
 document.addEventListener("submit",function(event){
