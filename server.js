@@ -312,12 +312,25 @@ app.post("/api/users/:userId/block", requireAuth, asyncRoute(async function (req
   res.json({ ok: true });
 }));
 app.post("/api/reports", requireAuth, writeLimiter, asyncRoute(async function (req, res) {
-  const targetUserId = req.body.targetUserId || null;
+  let targetUserId = req.body.targetUserId ? String(req.body.targetUserId) : null;
+  let chamberId = req.body.chamberId ? String(req.body.chamberId) : null;
+  let messageId = req.body.messageId ? String(req.body.messageId) : null;
   const reason = String(req.body.reason || "").trim();
   const details = String(req.body.details || "").trim().slice(0, 1000);
   if (!["spam","harassment","inappropriate","other"].includes(reason)) return res.status(400).json({ error: "Choose a report reason." });
+  if (targetUserId && !/^[0-9a-f-]{36}$/i.test(targetUserId)) return res.status(400).json({ error: "Invalid user reference." });
+  if (chamberId && !/^[0-9a-f-]{36}$/i.test(chamberId)) return res.status(400).json({ error: "Invalid Chamber reference." });
+  if (messageId && !/^\d{1,18}$/.test(messageId)) return res.status(400).json({ error: "Invalid message reference." });
+  if (messageId) {
+    const found = await pool.query("SELECT pm.user_id,p.chamber_id FROM pocket_messages pm JOIN pockets p ON p.id=pm.pocket_id WHERE pm.id=$1", [messageId]);
+    if (!found.rowCount || !found.rows[0].user_id) return res.status(404).json({ error: "That message is no longer available." });
+    if (!await requireChamberRole(found.rows[0].chamber_id, req.user.id, ["owner","moderator","member"])) return res.status(404).json({ error: "That message is no longer available." });
+    targetUserId = found.rows[0].user_id;
+    chamberId = found.rows[0].chamber_id;
+  }
+  if (!targetUserId || targetUserId === req.user.id) return res.status(400).json({ error: "Choose another user or message to report." });
   const id = crypto.randomUUID();
-  await pool.query("INSERT INTO user_reports(id,reporter_id,target_user_id,reason,details) VALUES($1,$2,$3,$4,$5)", [id, req.user.id, targetUserId, reason, details]);
+  await pool.query("INSERT INTO user_reports(id,reporter_id,target_user_id,chamber_id,message_id,reason,details) VALUES($1,$2,$3,$4,$5,$6,$7)", [id, req.user.id, targetUserId, chamberId, messageId, reason, details]);
   res.status(201).json({ ok: true, id: id });
 }));
 
