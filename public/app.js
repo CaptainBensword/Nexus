@@ -141,6 +141,11 @@ function connectSocket(){
       state.pocketMessages.push(payload.message);
       drawPocketMessages(true);
     });
+    state.socket.on("pocket:message-deleted",function(payload){
+      if(!state.chamber||!state.selectedPocket||payload.pocketId!==state.selectedPocket.id)return;
+      state.pocketMessages=state.pocketMessages.filter(function(item){return String(item.id)!==String(payload.messageId);});
+      drawPocketMessages(false);
+    });
     state.socket.on("dm:message",function(payload){
       if(!state.conversation||payload.conversationId!==state.conversation.id) return;
       if(state.dmMessages.some(function(item){return String(item.id)===String(payload.message.id)})) return;
@@ -243,7 +248,7 @@ function renderChamberDetail(){
     return '<div class="pocket-row"><button class="pocket-item '+(state.selectedPocket&&state.selectedPocket.id===pocket.id?"active":"")+'" data-pocket="'+escapeHTML(pocket.id)+'"><span>'+escapeHTML(pocket.emoji||"💬")+'</span><span class="pocket-label">'+escapeHTML(pocket.name)+'</span></button>'+(isManager?'<button class="pocket-more" data-action="edit-pocket" data-pocket="'+escapeHTML(pocket.id)+'" title="Pocket settings">⋯</button>':'')+'</div>';
   }).join("");
   var selected=state.selectedPocket||pockets[0];
-  return '<div class="section-head"><div><h2>'+escapeHTML(chamber.emoji||"🏠")+' '+escapeHTML(chamber.name)+'</h2><p>'+escapeHTML(chamber.description||"")+'</p></div><div class="button-row">'+(isManager?'<button class="outline-button" data-action="invite-chamber">Invite</button><button class="outline-button" data-action="manage-chamber">Manage</button>':'<button class="outline-button" data-action="invite-chamber">Invite</button>')+'<button class="outline-button" data-action="back-chambers">← All Chambers</button></div></div>'+
+  return '<div class="section-head"><div><h2>'+escapeHTML(chamber.emoji||"🏠")+' '+escapeHTML(chamber.name)+'</h2><p>'+escapeHTML(chamber.description||"")+'</p></div><div class="button-row">'+(isManager?'<button class="outline-button" data-action="invite-chamber">Invite</button><button class="outline-button" data-action="manage-chamber">Manage</button>':'<button class="outline-button" data-action="invite-chamber">Invite</button><button class="outline-button" data-action="leave-chamber">Leave</button>')+'<button class="outline-button" data-action="back-chambers">← All Chambers</button></div></div>'+
     '<div class="chamber-layout"><aside class="pocket-sidebar"><div class="pocket-sidebar-head"><span>POCKETS</span><button class="pocket-add" data-action="create-pocket" title="Create Pocket">＋</button></div>'+pocketList+'</aside>'+
     '<section class="pocket-main">'+(selected?renderPocketPane(selected):emptyState("＋","No Pockets","Create a Pocket for conversations.","Create Pocket","create-pocket"))+'</section></div>';
 }
@@ -256,7 +261,12 @@ function renderMessagesHTML(messages){
   if(!messages||!messages.length)return '<div class="message-empty">Nothing here yet. Start the conversation.</div>';
   return messages.map(function(message){
     var who=message.user||{displayName:"Unknown",id:""};
-    return '<article class="chat-message"><div class="chat-avatar">'+escapeHTML((who.displayName||who.username||"?").slice(0,1).toUpperCase())+'</div><div class="chat-copy"><div class="chat-meta"><b>'+escapeHTML(who.displayName||who.username||"Unknown")+'</b><time>'+escapeHTML(dateLabel(message.createdAt))+'</time></div><div class="chat-body">'+escapeHTML(message.body)+'</div></div></article>';
+    var canReport=!!who.id&&who.id!==state.user.id&&!state.demo;
+    var isPocket=state.page==="chambers"&&!!state.chamber;
+    var canManage=state.demo||(state.chamber&&(state.chamber.role==="owner"||state.chamber.role==="moderator"));
+    var canDelete=isPocket&&message.id&&(state.demo||who.id===state.user.id||canManage);
+    var controls=(canReport||canDelete)?'<div class="message-tools">'+(canReport?'<button class="message-report" data-action="report-user" data-user="'+escapeHTML(who.id)+'">Report user</button><button class="message-report" data-action="report-pocket-message" data-message="'+escapeHTML(message.id)+'">Report message</button>':'')+(canDelete?'<button class="message-report" data-action="delete-pocket-message" data-message="'+escapeHTML(message.id)+'">Delete</button>':'')+'</div>':'';
+    return '<article class="chat-message"><div class="chat-avatar">'+escapeHTML((who.displayName||who.username||"?").slice(0,1).toUpperCase())+'</div><div class="chat-copy"><div class="chat-meta"><b>'+escapeHTML(who.displayName||who.username||"Unknown")+'</b><time>'+escapeHTML(dateLabel(message.createdAt))+'</time></div><div class="chat-body">'+escapeHTML(message.body)+'</div>'+controls+'</div></article>';
   }).join("");
 }
 function drawPocketMessages(scroll){
@@ -366,6 +376,18 @@ function selectPocket(id){
   state.selectedPocket=pocket;
   loadPocketMessages().then(function(){render();joinCurrentPocket();}).catch(function(error){toast(error.message);});
 }
+function deletePocketMessage(id){
+  if(!state.chamber||!state.selectedPocket||!confirm("Delete this message?"))return;
+  if(state.demo){
+    state.pocketMessages=state.pocketMessages.filter(function(message){return String(message.id)!==String(id);});
+    setDemoPocketMessages(state.chamber.id,state.selectedPocket.id,state.pocketMessages);
+    drawPocketMessages(false);toast("Message deleted from preview.");return;
+  }
+  api("/pockets/"+encodeURIComponent(state.selectedPocket.id)+"/messages/"+encodeURIComponent(id),"DELETE").then(function(){
+    state.pocketMessages=state.pocketMessages.filter(function(message){return String(message.id)!==String(id);});
+    drawPocketMessages(false);
+  }).catch(function(error){toast(error.message);});
+}
 function sendPocketMessage(body){
   if(!state.chamber||!state.selectedPocket)return;
   if(state.demo){
@@ -375,10 +397,8 @@ function sendPocketMessage(body){
     state.pocketMessages=messages;drawPocketMessages(true);return Promise.resolve();
   }
   return api("/pockets/"+encodeURIComponent(state.selectedPocket.id)+"/messages","POST",{body:body}).then(function(result){
-    if(!state.socket||!state.socket.connected){
-      if(!state.pocketMessages.some(function(item){return String(item.id)===String(result.message.id)}))state.pocketMessages.push(result.message);
-      drawPocketMessages(true);
-    }
+    if(!state.pocketMessages.some(function(item){return String(item.id)===String(result.message.id)}))state.pocketMessages.push(result.message);
+    drawPocketMessages(true);
   });
 }
 function loadConversations(){
@@ -413,10 +433,8 @@ function sendDM(body){
     demo.dmMessages[state.conversation.id]=messages;saveDemo();state.dmMessages=messages;drawDMMessages(true);return Promise.resolve();
   }
   return api("/conversations/"+encodeURIComponent(state.conversation.id)+"/messages","POST",{body:body}).then(function(result){
-    if(!state.socket||!state.socket.connected){
-      if(!state.dmMessages.some(function(item){return String(item.id)===String(result.message.id)}))state.dmMessages.push(result.message);
-      drawDMMessages(true);
-    }
+    if(!state.dmMessages.some(function(item){return String(item.id)===String(result.message.id)}))state.dmMessages.push(result.message);
+    drawDMMessages(true);
   });
 }
 function refreshAndRender(){
@@ -449,6 +467,10 @@ function openModal(type,data){
   if(type==="manage-chamber"){
     html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Chamber settings</h3><button class="modal-close" data-close-modal>×</button></div><form id="editChamberForm" class="form-grid"><label class="form-label" for="editChamberName">Name</label><input id="editChamberName" class="form-input" maxlength="48" required value="'+escapeHTML(state.chamber.name)+'"><label class="form-label" for="editChamberEmoji">Emoji</label><input id="editChamberEmoji" class="form-input" maxlength="12" value="'+escapeHTML(state.chamber.emoji||"🏠")+'"><label class="form-label" for="editChamberDescription">Description</label><textarea id="editChamberDescription" class="form-textarea" maxlength="180">'+escapeHTML(state.chamber.description||"")+'</textarea><label class="form-label"><input id="editChamberPublic" type="checkbox" style="width:auto;margin-right:7px" '+(state.chamber.isPublic?"checked":"")+'>Discoverable Chamber</label><div class="modal-actions" style="justify-content:space-between"><button type="button" class="danger-button" data-action="delete-chamber">Delete Chamber</button><span class="button-row"><button type="button" class="soft-button" data-close-modal>Cancel</button><button class="primary-small" type="submit">Save</button></span></div></form></div></div>';
   }
+  if(type==="report"){
+    var subject=data.messageId?"message":"user";
+    html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Report '+subject+'</h3><button class="modal-close" data-close-modal>×</button></div><form id="reportForm" class="form-grid"><input type="hidden" id="reportUserId" value="'+escapeHTML(data.userId||"")+'"><input type="hidden" id="reportMessageId" value="'+escapeHTML(data.messageId||"")+'"><label class="form-label" for="reportReason">Reason</label><select id="reportReason" class="form-select"><option value="spam">Spam</option><option value="harassment">Harassment</option><option value="inappropriate">Inappropriate content</option><option value="other">Other</option></select><label class="form-label" for="reportDetails">Additional details (optional)</label><textarea id="reportDetails" class="form-textarea" maxlength="1000" placeholder="Add context that may help a moderator"></textarea><div class="modal-note">Reports are private. Please use them for genuine concerns.</div><div class="modal-actions"><button class="soft-button" type="button" data-close-modal>Cancel</button><button class="primary-small" type="submit">Submit Report</button></div></form></div></div>';
+  }
   if(type==="profile"){
     html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Display name</h3><button class="modal-close" data-close-modal>×</button></div><form id="profileForm" class="form-grid"><label class="form-label" for="displayNameInput">Display name</label><input id="displayNameInput" class="form-input" maxlength="32" required value="'+escapeHTML(state.user.displayName||state.user.username)+'"><div class="modal-actions"><button class="soft-button" type="button" data-close-modal>Cancel</button><button class="primary-small" type="submit">Save</button></div></form></div></div>';
   }
@@ -456,7 +478,7 @@ function openModal(type,data){
     html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Change password</h3><button class="modal-close" data-close-modal>×</button></div><form id="passwordForm" class="form-grid"><label class="form-label" for="currentPassword">Current password</label><input id="currentPassword" class="form-input" type="password" required><label class="form-label" for="newPassword">New password</label><input id="newPassword" class="form-input" type="password" minlength="12" required><div class="modal-note">Use at least 12 characters.</div><div class="modal-actions"><button class="soft-button" type="button" data-close-modal>Cancel</button><button class="primary-small" type="submit">Update password</button></div></form></div></div>';
   }
   if(type==="friend-options"){
-    html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Friend options</h3><button class="modal-close" data-close-modal>×</button></div><p class="modal-note">Choose how to manage this connection.</p><div class="modal-actions"><button class="danger-button" data-action="block-friend" data-friend="'+escapeHTML(data.friendId)+'">Block</button><button class="soft-button" data-action="remove-friend" data-friend="'+escapeHTML(data.friendId)+'">Remove friend</button></div></div></div>';
+    html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Friend options</h3><button class="modal-close" data-close-modal>×</button></div><p class="modal-note">Choose how to manage this connection.</p><div class="modal-actions"><button class="danger-button" data-action="block-friend" data-friend="'+escapeHTML(data.friendId)+'">Block</button><button class="soft-button" data-action="remove-friend" data-friend="'+escapeHTML(data.friendId)+'">Remove friend</button><button class="soft-button" data-action="report-user" data-user="'+escapeHTML(data.friendId)+'">Report</button></div></div></div>';
   }
   $("#modalRoot").innerHTML=html;
   var focus=$("#modalRoot input:not([type=checkbox]),#modalRoot textarea");
@@ -542,6 +564,19 @@ function saveChamber(data){
     Object.assign(state.chamber,result.chamber);closeModal();refreshAll().then(render);toast("Chamber updated.");
   });
 }
+function leaveChamber(){
+  if(!state.chamber||state.chamber.role==="owner")return;
+  var id=state.chamber.id;
+  if(!confirm("Leave "+state.chamber.name+"? You will need an invite to return if it is private."))return;
+  if(state.demo){
+    demo.chambers=demo.chambers.filter(function(chamber){return chamber.id!==id;});
+    Object.keys(demo.messages).forEach(function(key){if(key.indexOf(id+":")===0)delete demo.messages[key];});
+    state.chambers=demo.chambers;state.chamber=null;state.selectedPocket=null;saveDemo();render();toast("Left Chamber in preview.");return;
+  }
+  api("/chambers/"+encodeURIComponent(id)+"/leave","DELETE").then(function(){
+    state.chamber=null;state.selectedPocket=null;return refreshAll();
+  }).then(function(){render();toast("You left the Chamber.");}).catch(function(error){toast(error.message);});
+}
 function deleteChamber(){
   if(!state.chamber||!confirm("Delete this Chamber and all its Pockets and messages?"))return;
   var id=state.chamber.id;
@@ -611,11 +646,15 @@ function handleAction(action,element){
   else if(action==="edit-pocket"){var p=state.chamber&&state.chamber.pockets.find(function(item){return item.id===id;});if(p)openModal("edit-pocket",p);}
   else if(action==="delete-pocket")deletePocket(id);
   else if(action==="delete-chamber")deleteChamber();
+  else if(action==="leave-chamber")leaveChamber();
   else if(action==="copy-invite")copyInvite();
   else if(action==="accept-request")acceptRequest(id);
   else if(action==="decline-request"||action==="cancel-request")removeRequest(id);
   else if(action==="message-friend")openDM(id);
   else if(action==="friend-options")openModal("friend-options",{friendId:id});
+  else if(action==="report-user")openModal("report",{userId:element.dataset.user});
+  else if(action==="report-pocket-message")openModal("report",{messageId:element.dataset.message});
+  else if(action==="delete-pocket-message")deletePocketMessage(element.dataset.message);
   else if(action==="remove-friend")removeFriend(id,false);
   else if(action==="block-friend")removeFriend(id,true);
   else if(action==="edit-profile")openModal("profile");
@@ -702,6 +741,19 @@ document.addEventListener("submit",function(event){
     if(state.demo){demo.displayName=name;state.user.displayName=name;saveDemo();closeModal();render();toast("Preview name updated.");}
     else api("/auth/profile","PATCH",{displayName:name}).then(function(result){state.user=result.user;closeModal();render();toast("Display name updated.");}).catch(function(error){toast(error.message);});
   }
+  if(form.id==="reportForm"){
+    event.preventDefault();
+    var userId=$("#reportUserId").value||null;
+    var messageId=$("#reportMessageId").value||null;
+    var payload={targetUserId:userId,messageId:messageId,reason:$("#reportReason").value,details:$("#reportDetails").value.trim()};
+    if(state.demo){
+      demo.reports=demo.reports||[];
+      demo.reports.push({id:"demo-report-"+Date.now(),reason:payload.reason,details:payload.details,createdAt:new Date().toISOString()});
+      saveDemo();closeModal();toast("Report saved in this local preview.");
+    } else {
+      api("/reports","POST",payload).then(function(){closeModal();toast("Report submitted.");}).catch(function(error){toast(error.message);});
+    }
+  }
   if(form.id==="passwordForm"){
     event.preventDefault();
     if(state.demo){toast("Password changes are available on real accounts.");return;}
@@ -743,10 +795,20 @@ function startFromQuery(){
     if(state.user){openModal("join",{code:code});}
   }
 }
+function loadSocketClient(){
+  if(window.io)return Promise.resolve();
+  return new Promise(function(resolve){
+    var script=document.createElement("script");
+    script.src="/socket.io/socket.io.js";
+    script.onload=function(){resolve();};
+    script.onerror=function(){resolve();};
+    document.head.appendChild(script);
+  });
+}
 function init(){
   api("/health").then(function(){
     state.apiAvailable=true;
-    return api("/auth/me");
+    return loadSocketClient().then(function(){return api("/auth/me");});
   }).then(function(result){
     return enterReal(result.user);
   }).catch(function(error){
