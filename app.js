@@ -309,6 +309,7 @@ function renderSettings(){
     '<div class="setting-row"><div><div class="setting-label">Password</div><div class="setting-help">Change your account password</div></div><button class="outline-button" data-action="change-password">Change</button></div>'+
     '<div class="setting-row"><div><div class="setting-label">Account system</div><div class="setting-help">'+(state.demo?"Local preview only":"Nexus custom account service")+'</div></div><span class="status-pill">'+(state.demo?"PREVIEW":"CONNECTED")+'</span></div>'+
     '<div class="setting-row"><div><div class="setting-label">Sign out</div><div class="setting-help">End this session on this device</div></div><button class="danger-button" data-action="logout">Log Out</button></div>'+
+    '<div class="setting-row"><div><div class="setting-label">'+(state.demo?"Clear preview":"Delete account")+'</div><div class="setting-help">'+(state.demo?"Remove the temporary data saved in this browser.":"Permanently delete your account, Chambers, messages, and connections.")+'</div></div><button class="danger-button" data-action="delete-account">'+(state.demo?"Clear":"Delete")+'</button></div>'+
     '</div>';
 }
 function render(){
@@ -473,6 +474,9 @@ function openModal(type,data){
   }
   if(type==="profile"){
     html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Display name</h3><button class="modal-close" data-close-modal>×</button></div><form id="profileForm" class="form-grid"><label class="form-label" for="displayNameInput">Display name</label><input id="displayNameInput" class="form-input" maxlength="32" required value="'+escapeHTML(state.user.displayName||state.user.username)+'"><div class="modal-actions"><button class="soft-button" type="button" data-close-modal>Cancel</button><button class="primary-small" type="submit">Save</button></div></form></div></div>';
+  }
+  if(type==="delete-account"){
+    html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>'+(state.demo?"Clear preview data":"Delete account")+'</h3><button class="modal-close" data-close-modal>×</button></div>'+(state.demo?'<p class="modal-note">This clears only the demo data stored in this browser. It does not affect any real account.</p><form id="deleteAccountForm"><div class="modal-actions"><button type="button" class="soft-button" data-close-modal>Cancel</button><button type="submit" class="danger-button">Clear preview</button></div></form>':'<p class="modal-note">This permanently deletes your account and its associated data. This cannot be undone. Enter your current password to confirm.</p><form id="deleteAccountForm" class="form-grid"><label class="form-label" for="deleteAccountPassword">Current password</label><input id="deleteAccountPassword" class="form-input" type="password" required autocomplete="current-password"><div class="modal-actions"><button type="button" class="soft-button" data-close-modal>Cancel</button><button type="submit" class="danger-button">Permanently delete</button></div></form>')+'</div></div>';
   }
   if(type==="password"){
     html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Change password</h3><button class="modal-close" data-close-modal>×</button></div><form id="passwordForm" class="form-grid"><label class="form-label" for="currentPassword">Current password</label><input id="currentPassword" class="form-input" type="password" required><label class="form-label" for="newPassword">New password</label><input id="newPassword" class="form-input" type="password" minlength="12" required><div class="modal-note">Use at least 12 characters.</div><div class="modal-actions"><button class="soft-button" type="button" data-close-modal>Cancel</button><button class="primary-small" type="submit">Update password</button></div></form></div></div>';
@@ -659,6 +663,7 @@ function handleAction(action,element){
   else if(action==="block-friend")removeFriend(id,true);
   else if(action==="edit-profile")openModal("profile");
   else if(action==="change-password")openModal("password");
+  else if(action==="delete-account")openModal("delete-account");
   else if(action==="logout")logout();
   else if(action==="go-friends"){state.page="friends";render();}
   else if(action==="toggle-emoji")toggleEmoji(element.dataset.target);
@@ -753,6 +758,17 @@ document.addEventListener("submit",function(event){
     } else {
       api("/reports","POST",payload).then(function(){closeModal();toast("Report submitted.");}).catch(function(error){toast(error.message);});
     }
+  }
+  if(form.id==="deleteAccountForm"){
+    event.preventDefault();
+    if(state.demo){
+      try{localStorage.removeItem("nexus-demo-data");localStorage.removeItem("nexus-preview-seen");localStorage.removeItem("nexus-preview-profile");}catch(error){}
+      demo={chambers:[],requests:[],messages:{},friends:[],conversations:[],reports:[],dmMessages:{},displayName:"Admin Preview"};
+      state.user=null;state.demo=false;state.chamber=null;state.conversation=null;closeModal();showLogin();toast("Preview data cleared.");return;
+    }
+    api("/auth/account","DELETE",{password:$("#deleteAccountPassword").value}).then(function(){
+      disconnectSocket();state.user=null;state.chamber=null;state.conversation=null;closeModal();showLogin();setAuthTab("login");showLoginNote("Your account was deleted.");
+    }).catch(function(error){toast(error.message);});
   }
   if(form.id==="passwordForm"){
     event.preventDefault();
