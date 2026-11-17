@@ -164,3 +164,8 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}button:focus-vis
 .message-view{display:grid;place-items:center;padding:22px;min-width:0}
 .message-view .empty-state{width:min(100%,390px)}
 @media(max-width:720px){.pocket-more{opacity:1;width:20px}.pocket-row{gap:0}}
+
+.message-tools{display:flex;gap:8px;margin-top:5px;opacity:.72}
+.message-tools:hover{opacity:1}
+.message-report{border:0;background:transparent;color:#9e929e;padding:2px 0;font-size:9px}
+.message-report:hover{color:#ff7488;text-decoration:underline;text-underline-offset:3px}
