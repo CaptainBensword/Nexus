@@ -154,3 +154,13 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}button:focus-vis
 .login-card{padding:22px 18px}.login-logo{height:100px;margin-bottom:9px}.section-head{align-items:flex-start}.section-head .button-row{justify-content:flex-end}
 }
 @media(max-width:430px){.topbar-title>span{font-size:8px}.preview-flag{display:none}.global-search{width:33px}.chamber-layout{grid-template-columns:94px minmax(0,1fr)}.pocket-header h3{font-size:10px}.pocket-header .button-row{gap:4px}.outline-button{height:31px;font-size:9px}.pocket-header .outline-button{height:29px}.chat-body{font-size:10px}}
+
+
+.pocket-row{display:flex;align-items:center;gap:3px;margin-bottom:3px}
+.pocket-row .pocket-item{flex:1;min-width:0}
+.pocket-more{width:25px;height:28px;border:0;border-radius:6px;background:transparent;color:#817781;font-size:15px;opacity:.55}
+.pocket-row:hover .pocket-more{opacity:1}
+.pocket-more:hover{background:#24171f;color:#fff}
+.message-view{display:grid;place-items:center;padding:22px;min-width:0}
+.message-view .empty-state{width:min(100%,390px)}
+@media(max-width:720px){.pocket-more{opacity:1;width:20px}.pocket-row{gap:0}}
