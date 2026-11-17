@@ -318,6 +318,13 @@ app.get("/api/chambers/discover", requireAuth, asyncRoute(async function (req, r
   );
   res.json({ chambers: result.rows });
 }));
+app.post("/api/chambers/:id/join", requireAuth, asyncRoute(async function (req, res) {
+  const chamber = await pool.query("SELECT id,is_public FROM chambers WHERE id=$1", [req.params.id]);
+  if (!chamber.rowCount) return res.status(404).json({ error: "Chamber not found." });
+  if (!chamber.rows[0].is_public) return res.status(403).json({ error: "This Chamber is private. Ask a member for an invite code." });
+  await pool.query("INSERT INTO chamber_members(chamber_id,user_id,role) VALUES($1,$2,'member') ON CONFLICT DO NOTHING", [req.params.id, req.user.id]);
+  res.json({ ok: true, chamberId: req.params.id });
+}));
 app.post("/api/chambers", requireAuth, writeLimiter, asyncRoute(async function (req, res) {
   const name = String(req.body.name || "").trim();
   const description = String(req.body.description || "").trim().slice(0, 180);
