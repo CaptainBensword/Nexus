@@ -283,6 +283,7 @@ app.delete("/api/friends/requests/:id", requireAuth, asyncRoute(async function (
 app.delete("/api/friends/:friendId", requireAuth, asyncRoute(async function (req, res) {
   await pool.query("DELETE FROM friendships WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)", [req.user.id, req.params.friendId]);
   await pool.query("DELETE FROM friend_requests WHERE (sender_id=$1 AND receiver_id=$2) OR (sender_id=$2 AND receiver_id=$1)", [req.user.id, req.params.friendId]);
+  await pool.query("DELETE FROM dm_conversations WHERE (user_one=$1 AND user_two=$2) OR (user_one=$2 AND user_two=$1)", [req.user.id, req.params.friendId]);
   res.json({ ok: true });
 }));
 app.post("/api/users/:userId/block", requireAuth, asyncRoute(async function (req, res) {
@@ -290,6 +291,7 @@ app.post("/api/users/:userId/block", requireAuth, asyncRoute(async function (req
   await pool.query("INSERT INTO blocked_users(blocker_id,blocked_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [req.user.id, req.params.userId]);
   await pool.query("DELETE FROM friendships WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)", [req.user.id, req.params.userId]);
   await pool.query("DELETE FROM friend_requests WHERE (sender_id=$1 AND receiver_id=$2) OR (sender_id=$2 AND receiver_id=$1)", [req.user.id, req.params.userId]);
+  await pool.query("DELETE FROM dm_conversations WHERE (user_one=$1 AND user_two=$2) OR (user_one=$2 AND user_two=$1)", [req.user.id, req.params.userId]);
   res.json({ ok: true });
 }));
 app.post("/api/reports", requireAuth, writeLimiter, asyncRoute(async function (req, res) {
@@ -520,6 +522,9 @@ function parseCookieHeader(value) {
 }
 io.use(async function (socket, next) {
   try {
+    const origin = socket.handshake.headers.origin;
+    const host = socket.handshake.headers.host;
+    if (origin && host) { const parsed = new URL(origin); if (parsed.host !== host) return next(new Error("Cross-origin connection refused.")); }
     const cookies = parseCookieHeader(socket.handshake.headers.cookie);
     const token = cookies[COOKIE_NAME];
     if (!token || token.length > 180) return next(new Error("Please log in."));
@@ -602,7 +607,6 @@ io.on("connection", function (socket) {
     try {
       const others = await io.in(userRoom).fetchSockets();
       if (others.length === 0) {
-        await pool.query("UPDATE users SET last_seen_at=now() WHERE id=$1", [user.id]);
         await notifyPresence(user.id, false);
       }
     } catch (error) { console.error(error); }
