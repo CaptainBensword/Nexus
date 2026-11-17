@@ -781,10 +781,20 @@ function startFromQuery(){
     if(state.user){openModal("join",{code:code});}
   }
 }
+function loadSocketClient(){
+  if(window.io)return Promise.resolve();
+  return new Promise(function(resolve){
+    var script=document.createElement("script");
+    script.src="/socket.io/socket.io.js";
+    script.onload=function(){resolve();};
+    script.onerror=function(){resolve();};
+    document.head.appendChild(script);
+  });
+}
 function init(){
   api("/health").then(function(){
     state.apiAvailable=true;
-    return api("/auth/me");
+    return loadSocketClient().then(function(){return api("/auth/me");});
   }).then(function(result){
     return enterReal(result.user);
   }).catch(function(error){
