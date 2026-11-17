@@ -7,8 +7,10 @@ CREATE TABLE IF NOT EXISTS users (
   display_name text NOT NULL,
   password_hash text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
-  last_seen_at timestamptz
+  last_seen_at timestamptz,
+  is_online boolean NOT NULL DEFAULT false
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_online boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash text PRIMARY KEY,
