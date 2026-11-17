@@ -393,12 +393,20 @@ app.patch("/api/chambers/:id", requireAuth, asyncRoute(async function (req, res)
   const isPublic = req.body.isPublic === true;
   if (!validName(name, 48)) return res.status(400).json({ error: "Chamber names must be 1–48 characters." });
   const result = await pool.query("UPDATE chambers SET name=$1,description=$2,emoji=$3,is_public=$4 WHERE id=$5 RETURNING id,name,description,emoji,is_public,owner_id", [name, description, emoji, isPublic, req.params.id]);
-  res.json({ chamber: result.rows[0] });
+  const row = result.rows[0];
+  res.json({ chamber: { id: row.id, name: row.name, description: row.description, emoji: row.emoji, isPublic: row.is_public, ownerId: row.owner_id } });
 }));
 app.delete("/api/chambers/:id", requireAuth, asyncRoute(async function (req, res) {
   const role = await requireChamberRole(req.params.id, req.user.id, ["owner"]);
   if (!role) return res.status(403).json({ error: "Only the Chamber owner can delete it." });
   await pool.query("DELETE FROM chambers WHERE id=$1", [req.params.id]);
+  res.json({ ok: true });
+}));
+app.delete("/api/chambers/:id/leave", requireAuth, asyncRoute(async function (req, res) {
+  const membership = await pool.query("SELECT role FROM chamber_members WHERE chamber_id=$1 AND user_id=$2", [req.params.id, req.user.id]);
+  if (!membership.rowCount) return res.status(404).json({ error: "You are not a member of this Chamber." });
+  if (membership.rows[0].role === "owner") return res.status(400).json({ error: "The owner must transfer ownership or delete the Chamber before leaving." });
+  await pool.query("DELETE FROM chamber_members WHERE chamber_id=$1 AND user_id=$2", [req.params.id, req.user.id]);
   res.json({ ok: true });
 }));
 app.post("/api/chambers/:id/invites", requireAuth, asyncRoute(async function (req, res) {
