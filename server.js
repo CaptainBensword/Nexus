@@ -90,7 +90,8 @@ function publicUser(row) {
     username: row.username,
     displayName: row.display_name,
     createdAt: row.created_at,
-    lastSeenAt: row.last_seen_at || null
+    lastSeenAt: row.last_seen_at || null,
+    online: !!row.is_online
   };
 }
 function validName(name, max) {
@@ -253,13 +254,13 @@ app.delete("/api/auth/account", requireAuth, authLimiter, asyncRoute(async funct
 }));
 app.get("/api/friends", requireAuth, asyncRoute(async function (req, res) {
   const [friends, incoming, outgoing] = await Promise.all([
-    pool.query("SELECT u.id,u.username,u.display_name,u.last_seen_at FROM friendships f JOIN users u ON u.id=f.friend_id WHERE f.user_id=$1 ORDER BY u.username_norm", [req.user.id]),
+    pool.query("SELECT u.id,u.username,u.display_name,u.last_seen_at,u.is_online FROM friendships f JOIN users u ON u.id=f.friend_id WHERE f.user_id=$1 ORDER BY u.username_norm", [req.user.id]),
     pool.query("SELECT r.id,r.created_at,u.id AS user_id,u.username,u.display_name FROM friend_requests r JOIN users u ON u.id=r.sender_id WHERE r.receiver_id=$1 ORDER BY r.created_at DESC", [req.user.id]),
     pool.query("SELECT r.id,r.created_at,u.id AS user_id,u.username,u.display_name FROM friend_requests r JOIN users u ON u.id=r.receiver_id WHERE r.sender_id=$1 ORDER BY r.created_at DESC", [req.user.id])
   ]);
   const now = Date.now();
   res.json({
-    friends: friends.rows.map(function (row) { return { id: row.id, username: row.username, displayName: row.display_name, online: row.last_seen_at ? now - new Date(row.last_seen_at).getTime() < 75000 : false, lastSeenAt: row.last_seen_at }; }),
+    friends: friends.rows.map(function (row) { return { id: row.id, username: row.username, displayName: row.display_name, online: !!row.is_online && row.last_seen_at ? now - new Date(row.last_seen_at).getTime() < 75000 : false, lastSeenAt: row.last_seen_at }; }),
     incoming: incoming.rows,
     outgoing: outgoing.rows
   });
@@ -604,11 +605,11 @@ io.on("connection", function (socket) {
   const user = socket.user;
   const userRoom = "user:" + user.id;
   socket.join(userRoom);
-  pool.query("UPDATE users SET last_seen_at=now() WHERE id=$1", [user.id]).then(function () { return notifyPresence(user.id, true); }).catch(console.error);
+  pool.query("UPDATE users SET last_seen_at=now(),is_online=true WHERE id=$1", [user.id]).then(function () { return notifyPresence(user.id, true); }).catch(console.error);
   let lastSendAt = 0;
 
   socket.on("heartbeat", function () {
-    pool.query("UPDATE users SET last_seen_at=now() WHERE id=$1", [user.id]).catch(console.error);
+    pool.query("UPDATE users SET last_seen_at=now(),is_online=true WHERE id=$1", [user.id]).catch(console.error);
   });
   socket.on("join-pocket", async function (pocketId, ack) {
     try {
@@ -670,6 +671,7 @@ io.on("connection", function (socket) {
     try {
       const others = await io.in(userRoom).fetchSockets();
       if (others.length === 0) {
+        await pool.query("UPDATE users SET is_online=false,last_seen_at=now() WHERE id=$1", [user.id]);
         await notifyPresence(user.id, false);
       }
     } catch (error) { console.error(error); }
