@@ -458,7 +458,7 @@ function openModal(type,data){
     html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Change password</h3><button class="modal-close" data-close-modal>×</button></div><form id="passwordForm" class="form-grid"><label class="form-label" for="currentPassword">Current password</label><input id="currentPassword" class="form-input" type="password" required><label class="form-label" for="newPassword">New password</label><input id="newPassword" class="form-input" type="password" minlength="12" required><div class="modal-note">Use at least 12 characters.</div><div class="modal-actions"><button class="soft-button" type="button" data-close-modal>Cancel</button><button class="primary-small" type="submit">Update password</button></div></form></div></div>';
   }
   if(type==="friend-options"){
-    html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Friend options</h3><button class="modal-close" data-close-modal>×</button></div><p class="modal-note">Choose how to manage this connection.</p><div class="modal-actions"><button class="danger-button" data-action="block-friend" data-friend="'+escapeHTML(data.friendId)+'">Block</button><button class="soft-button" data-action="remove-friend" data-friend="'+escapeHTML(data.friendId)+'">Remove friend</button></div></div></div>';
+    html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Friend options</h3><button class="modal-close" data-close-modal>×</button></div><p class="modal-note">Choose how to manage this connection.</p><div class="modal-actions"><button class="danger-button" data-action="block-friend" data-friend="'+escapeHTML(data.friendId)+'">Block</button><button class="soft-button" data-action="remove-friend" data-friend="'+escapeHTML(data.friendId)+'">Remove friend</button><button class="soft-button" data-action="report-user" data-user="'+escapeHTML(data.friendId)+'">Report</button></div></div></div>';
   }
   $("#modalRoot").innerHTML=html;
   var focus=$("#modalRoot input:not([type=checkbox]),#modalRoot textarea");
@@ -618,6 +618,8 @@ function handleAction(action,element){
   else if(action==="decline-request"||action==="cancel-request")removeRequest(id);
   else if(action==="message-friend")openDM(id);
   else if(action==="friend-options")openModal("friend-options",{friendId:id});
+  else if(action==="report-user")openModal("report",{userId:element.dataset.user});
+  else if(action==="report-pocket-message")openModal("report",{messageId:element.dataset.message});
   else if(action==="remove-friend")removeFriend(id,false);
   else if(action==="block-friend")removeFriend(id,true);
   else if(action==="edit-profile")openModal("profile");
