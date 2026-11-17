@@ -370,7 +370,7 @@ app.delete("/api/chambers/:id", requireAuth, asyncRoute(async function (req, res
   res.json({ ok: true });
 }));
 app.post("/api/chambers/:id/invites", requireAuth, asyncRoute(async function (req, res) {
-  if (!await requireChamberRole(req.params.id, req.user.id, ["owner","moderator"])) return res.status(403).json({ error: "Only Chamber managers can create invite links." });
+  if (!await requireChamberRole(req.params.id, req.user.id, ["owner","moderator","member"])) return res.status(403).json({ error: "Join this Chamber before creating an invite link." });
   const code = crypto.randomBytes(6).toString("base64url");
   await pool.query("INSERT INTO chamber_invites(code,chamber_id,created_by,expires_at,max_uses) VALUES($1,$2,$3,now()+interval '7 days',50)", [code, req.params.id, req.user.id]);
   res.status(201).json({ code: code, expiresInDays: 7, inviteUrl: "/?join=" + code });
