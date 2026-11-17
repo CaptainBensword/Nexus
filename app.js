@@ -141,6 +141,11 @@ function connectSocket(){
       state.pocketMessages.push(payload.message);
       drawPocketMessages(true);
     });
+    state.socket.on("pocket:message-deleted",function(payload){
+      if(!state.chamber||!state.selectedPocket||payload.pocketId!==state.selectedPocket.id)return;
+      state.pocketMessages=state.pocketMessages.filter(function(item){return String(item.id)!==String(payload.messageId);});
+      drawPocketMessages(false);
+    });
     state.socket.on("dm:message",function(payload){
       if(!state.conversation||payload.conversationId!==state.conversation.id) return;
       if(state.dmMessages.some(function(item){return String(item.id)===String(payload.message.id)})) return;
@@ -257,7 +262,10 @@ function renderMessagesHTML(messages){
   return messages.map(function(message){
     var who=message.user||{displayName:"Unknown",id:""};
     var canReport=!!who.id&&who.id!==state.user.id&&!state.demo;
-    var controls=canReport?'<div class="message-tools"><button class="message-report" data-action="report-user" data-user="'+escapeHTML(who.id)+'">Report user</button>'+(state.page==="chambers"&&state.chamber?'<button class="message-report" data-action="report-pocket-message" data-message="'+escapeHTML(message.id)+'">Report message</button>':'')+'</div>':'';
+    var isPocket=state.page==="chambers"&&!!state.chamber;
+    var canManage=state.demo||(state.chamber&&(state.chamber.role==="owner"||state.chamber.role==="moderator"));
+    var canDelete=isPocket&&message.id&&(state.demo||who.id===state.user.id||canManage);
+    var controls=(canReport||canDelete)?'<div class="message-tools">'+(canReport?'<button class="message-report" data-action="report-user" data-user="'+escapeHTML(who.id)+'">Report user</button><button class="message-report" data-action="report-pocket-message" data-message="'+escapeHTML(message.id)+'">Report message</button>':'')+(canDelete?'<button class="message-report" data-action="delete-pocket-message" data-message="'+escapeHTML(message.id)+'">Delete</button>':'')+'</div>':'';
     return '<article class="chat-message"><div class="chat-avatar">'+escapeHTML((who.displayName||who.username||"?").slice(0,1).toUpperCase())+'</div><div class="chat-copy"><div class="chat-meta"><b>'+escapeHTML(who.displayName||who.username||"Unknown")+'</b><time>'+escapeHTML(dateLabel(message.createdAt))+'</time></div><div class="chat-body">'+escapeHTML(message.body)+'</div>'+controls+'</div></article>';
   }).join("");
 }
@@ -367,6 +375,18 @@ function selectPocket(id){
   if(!pocket)return;
   state.selectedPocket=pocket;
   loadPocketMessages().then(function(){render();joinCurrentPocket();}).catch(function(error){toast(error.message);});
+}
+function deletePocketMessage(id){
+  if(!state.chamber||!state.selectedPocket||!confirm("Delete this message?"))return;
+  if(state.demo){
+    state.pocketMessages=state.pocketMessages.filter(function(message){return String(message.id)!==String(id);});
+    setDemoPocketMessages(state.chamber.id,state.selectedPocket.id,state.pocketMessages);
+    drawPocketMessages(false);toast("Message deleted from preview.");return;
+  }
+  api("/pockets/"+encodeURIComponent(state.selectedPocket.id)+"/messages/"+encodeURIComponent(id),"DELETE").then(function(){
+    state.pocketMessages=state.pocketMessages.filter(function(message){return String(message.id)!==String(id);});
+    drawPocketMessages(false);
+  }).catch(function(error){toast(error.message);});
 }
 function sendPocketMessage(body){
   if(!state.chamber||!state.selectedPocket)return;
@@ -620,6 +640,7 @@ function handleAction(action,element){
   else if(action==="friend-options")openModal("friend-options",{friendId:id});
   else if(action==="report-user")openModal("report",{userId:element.dataset.user});
   else if(action==="report-pocket-message")openModal("report",{messageId:element.dataset.message});
+  else if(action==="delete-pocket-message")deletePocketMessage(element.dataset.message);
   else if(action==="remove-friend")removeFriend(id,false);
   else if(action==="block-friend")removeFriend(id,true);
   else if(action==="edit-profile")openModal("profile");
