@@ -50,7 +50,8 @@ app.use(helmet({
       imgSrc: ["'self'", "data:"],
       objectSrc: ["'none'"],
       scriptSrc: ["'self'"],
-      styleSrc: ["'self'"]
+      styleSrc: ["'self'"],
+      styleSrcAttr: ["'unsafe-inline'"]
     }
   },
   crossOriginEmbedderPolicy: false
