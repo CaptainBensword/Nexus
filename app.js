@@ -706,6 +706,19 @@ document.addEventListener("submit",function(event){
     if(state.demo){demo.displayName=name;state.user.displayName=name;saveDemo();closeModal();render();toast("Preview name updated.");}
     else api("/auth/profile","PATCH",{displayName:name}).then(function(result){state.user=result.user;closeModal();render();toast("Display name updated.");}).catch(function(error){toast(error.message);});
   }
+  if(form.id==="reportForm"){
+    event.preventDefault();
+    var userId=$("#reportUserId").value||null;
+    var messageId=$("#reportMessageId").value||null;
+    var payload={targetUserId:userId,messageId:messageId,reason:$("#reportReason").value,details:$("#reportDetails").value.trim()};
+    if(state.demo){
+      demo.reports=demo.reports||[];
+      demo.reports.push({id:"demo-report-"+Date.now(),reason:payload.reason,details:payload.details,createdAt:new Date().toISOString()});
+      saveDemo();closeModal();toast("Report saved in this local preview.");
+    } else {
+      api("/reports","POST",payload).then(function(){closeModal();toast("Report submitted.");}).catch(function(error){toast(error.message);});
+    }
+  }
   if(form.id==="passwordForm"){
     event.preventDefault();
     if(state.demo){toast("Password changes are available on real accounts.");return;}
