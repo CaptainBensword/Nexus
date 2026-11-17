@@ -227,6 +227,7 @@ function renderChambers(){
   if(state.chamber) return renderChamberDetail();
   var tab=state.chamberTab||"mine";
   var list=tab==="mine"?state.chambers:state.discover;
+  if(state.search){var query=state.search;list=list.filter(function(chamber){return String(chamber.name||"").toLowerCase().includes(query)||String(chamber.description||"").toLowerCase().includes(query)||(chamber.pockets||[]).some(function(pocket){return String(pocket.name||"").toLowerCase().includes(query);});});}
   var content=list.length?(tab==="mine"?'<div class="chamber-grid">'+list.map(chamberCard).join("")+'<button class="create-card" data-action="create-chamber"><span class="create-plus">+</span>Create Chamber</button></div>':'<div class="chamber-grid">'+list.map(function(chamber){
     return '<div class="discover-card"><div class="discover-emoji">'+escapeHTML(chamber.emoji||"🏠")+'</div><div class="discover-copy"><strong>'+escapeHTML(chamber.name)+'</strong><p>'+escapeHTML(chamber.description||"")+' · '+(chamber.member_count||0)+' members</p></div><button class="primary-small" data-action="join-public" data-chamber="'+escapeHTML(chamber.id)+'">Join</button></div>';
   }).join("")+'</div>'):emptyState(tab==="mine"?"▦":"⌕",tab==="mine"?"No Chambers yet":"Nothing to discover","Create a Chamber or join one with an invite code.",tab==="mine"?"Create Chamber":"Join with code",tab==="mine"?"create-chamber":"join-chamber");
@@ -242,7 +243,7 @@ function renderChamberDetail(){
     return '<div class="pocket-row"><button class="pocket-item '+(state.selectedPocket&&state.selectedPocket.id===pocket.id?"active":"")+'" data-pocket="'+escapeHTML(pocket.id)+'"><span>'+escapeHTML(pocket.emoji||"💬")+'</span><span class="pocket-label">'+escapeHTML(pocket.name)+'</span></button>'+(isManager?'<button class="pocket-more" data-action="edit-pocket" data-pocket="'+escapeHTML(pocket.id)+'" title="Pocket settings">⋯</button>':'')+'</div>';
   }).join("");
   var selected=state.selectedPocket||pockets[0];
-  return '<div class="section-head"><div><h2>'+escapeHTML(chamber.emoji||"🏠")+' '+escapeHTML(chamber.name)+'</h2><p>'+escapeHTML(chamber.description||"")+'</p></div><div class="button-row"><button class="outline-button" data-action="invite-chamber">Invite</button><button class="outline-button" data-action="manage-chamber">Manage</button><button class="outline-button" data-action="back-chambers">← All Chambers</button></div></div>'+
+  return '<div class="section-head"><div><h2>'+escapeHTML(chamber.emoji||"🏠")+' '+escapeHTML(chamber.name)+'</h2><p>'+escapeHTML(chamber.description||"")+'</p></div><div class="button-row">'+(isManager?'<button class="outline-button" data-action="invite-chamber">Invite</button><button class="outline-button" data-action="manage-chamber">Manage</button>':'<button class="outline-button" data-action="invite-chamber">Invite</button>')+'<button class="outline-button" data-action="back-chambers">← All Chambers</button></div></div>'+
     '<div class="chamber-layout"><aside class="pocket-sidebar"><div class="pocket-sidebar-head"><span>POCKETS</span><button class="pocket-add" data-action="create-pocket" title="Create Pocket">＋</button></div>'+pocketList+'</aside>'+
     '<section class="pocket-main">'+(selected?renderPocketPane(selected):emptyState("＋","No Pockets","Create a Pocket for conversations.","Create Pocket","create-pocket"))+'</section></div>';
 }
@@ -399,6 +400,7 @@ function openDM(friendId){
       state.conversations=list.conversations||[];
       var found=state.conversations.find(function(item){return item.id===result.conversationId;});
       state.conversation=found||{id:result.conversationId,friendId:friend.id,username:friend.username,displayName:friend.displayName};
+      if(state.socket&&state.socket.connected)state.socket.emit("join-dm",state.conversation.id);
       return api("/conversations/"+encodeURIComponent(result.conversationId)+"/messages");
     });
   }).then(function(result){state.dmMessages=result.messages||[];state.page="messages";render();if(state.socket&&state.socket.connected)state.socket.emit("join-dm",state.conversation.id);}).catch(function(error){toast(error.message);});
@@ -556,12 +558,12 @@ function inviteChamber(){
   if(!state.chamber)return;
   if(state.demo){
     var demoCode="NEX-"+Math.random().toString(36).slice(2,8).toUpperCase();
-    demo.inviteCode=demoCode;saveDemo();openModal("invite",{code:demoCode});return;
+    state.chamber.inviteCode=demoCode;demo.chambers=state.chambers;saveDemo();openModal("invite",{code:demoCode});return;
   }
   api("/chambers/"+encodeURIComponent(state.chamber.id)+"/invites","POST",{}).then(function(result){openModal("invite",{code:result.code});}).catch(function(error){toast(error.message);});
 }
 function joinChamber(code){
-  if(state.demo){var chamber=demo.chambers.find(function(item){return item.inviteCode===code;});if(!chamber){toast("That invite code is not available in this browser preview.");return Promise.resolve();}state.chamber=chamber;closeModal();render();return Promise.resolve();}
+  if(state.demo){var chamber=demo.chambers.find(function(item){return item.inviteCode===code;});if(!chamber){toast("That invite code is not available in this browser preview.");return Promise.resolve();}state.chamber=chamber;state.selectedPocket=chamber.pockets[0]||null;state.pocketMessages=state.selectedPocket?demoPocketMessages(chamber.id,state.selectedPocket.id):[];closeModal();render();return Promise.resolve();}
   return api("/chambers/join","POST",{code:code}).then(function(result){closeModal();return refreshAll().then(function(){return openChamber(result.chamberId);});});
 }
 function joinPublicChamber(id){
