@@ -248,7 +248,7 @@ function renderChamberDetail(){
     return '<div class="pocket-row"><button class="pocket-item '+(state.selectedPocket&&state.selectedPocket.id===pocket.id?"active":"")+'" data-pocket="'+escapeHTML(pocket.id)+'"><span>'+escapeHTML(pocket.emoji||"💬")+'</span><span class="pocket-label">'+escapeHTML(pocket.name)+'</span></button>'+(isManager?'<button class="pocket-more" data-action="edit-pocket" data-pocket="'+escapeHTML(pocket.id)+'" title="Pocket settings">⋯</button>':'')+'</div>';
   }).join("");
   var selected=state.selectedPocket||pockets[0];
-  return '<div class="section-head"><div><h2>'+escapeHTML(chamber.emoji||"🏠")+' '+escapeHTML(chamber.name)+'</h2><p>'+escapeHTML(chamber.description||"")+'</p></div><div class="button-row">'+(isManager?'<button class="outline-button" data-action="invite-chamber">Invite</button><button class="outline-button" data-action="manage-chamber">Manage</button>':'<button class="outline-button" data-action="invite-chamber">Invite</button>')+'<button class="outline-button" data-action="back-chambers">← All Chambers</button></div></div>'+
+  return '<div class="section-head"><div><h2>'+escapeHTML(chamber.emoji||"🏠")+' '+escapeHTML(chamber.name)+'</h2><p>'+escapeHTML(chamber.description||"")+'</p></div><div class="button-row">'+(isManager?'<button class="outline-button" data-action="invite-chamber">Invite</button><button class="outline-button" data-action="manage-chamber">Manage</button>':'<button class="outline-button" data-action="invite-chamber">Invite</button><button class="outline-button" data-action="leave-chamber">Leave</button>')+'<button class="outline-button" data-action="back-chambers">← All Chambers</button></div></div>'+
     '<div class="chamber-layout"><aside class="pocket-sidebar"><div class="pocket-sidebar-head"><span>POCKETS</span><button class="pocket-add" data-action="create-pocket" title="Create Pocket">＋</button></div>'+pocketList+'</aside>'+
     '<section class="pocket-main">'+(selected?renderPocketPane(selected):emptyState("＋","No Pockets","Create a Pocket for conversations.","Create Pocket","create-pocket"))+'</section></div>';
 }
@@ -564,6 +564,19 @@ function saveChamber(data){
     Object.assign(state.chamber,result.chamber);closeModal();refreshAll().then(render);toast("Chamber updated.");
   });
 }
+function leaveChamber(){
+  if(!state.chamber||state.chamber.role==="owner")return;
+  var id=state.chamber.id;
+  if(!confirm("Leave "+state.chamber.name+"? You will need an invite to return if it is private."))return;
+  if(state.demo){
+    demo.chambers=demo.chambers.filter(function(chamber){return chamber.id!==id;});
+    Object.keys(demo.messages).forEach(function(key){if(key.indexOf(id+":")===0)delete demo.messages[key];});
+    state.chambers=demo.chambers;state.chamber=null;state.selectedPocket=null;saveDemo();render();toast("Left Chamber in preview.");return;
+  }
+  api("/chambers/"+encodeURIComponent(id)+"/leave","DELETE").then(function(){
+    state.chamber=null;state.selectedPocket=null;return refreshAll();
+  }).then(function(){render();toast("You left the Chamber.");}).catch(function(error){toast(error.message);});
+}
 function deleteChamber(){
   if(!state.chamber||!confirm("Delete this Chamber and all its Pockets and messages?"))return;
   var id=state.chamber.id;
@@ -633,6 +646,7 @@ function handleAction(action,element){
   else if(action==="edit-pocket"){var p=state.chamber&&state.chamber.pockets.find(function(item){return item.id===id;});if(p)openModal("edit-pocket",p);}
   else if(action==="delete-pocket")deletePocket(id);
   else if(action==="delete-chamber")deleteChamber();
+  else if(action==="leave-chamber")leaveChamber();
   else if(action==="copy-invite")copyInvite();
   else if(action==="accept-request")acceptRequest(id);
   else if(action==="decline-request"||action==="cancel-request")removeRequest(id);
