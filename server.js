@@ -470,6 +470,18 @@ app.delete("/api/pockets/:id", requireAuth, asyncRoute(async function (req, res)
   await pool.query("DELETE FROM pockets WHERE id=$1", [req.params.id]);
   res.json({ ok: true });
 }));
+app.delete("/api/pockets/:id/messages/:messageId", requireAuth, asyncRoute(async function (req, res) {
+  if (!/^\d{1,18}$/.test(String(req.params.messageId))) return res.status(400).json({ error: "Invalid message reference." });
+  const access = await requirePocketAccess(req.params.id, req.user.id);
+  if (!access) return res.status(404).json({ error: "Pocket not found." });
+  const found = await pool.query("SELECT user_id FROM pocket_messages WHERE id=$1 AND pocket_id=$2", [req.params.messageId, req.params.id]);
+  if (!found.rowCount) return res.status(404).json({ error: "Message not found." });
+  const role = await requireChamberRole(access.chamber_id, req.user.id, ["owner","moderator"]);
+  if (found.rows[0].user_id !== req.user.id && !role) return res.status(403).json({ error: "You can only delete your own messages." });
+  await pool.query("DELETE FROM pocket_messages WHERE id=$1 AND pocket_id=$2", [req.params.messageId, req.params.id]);
+  io.to("pocket:" + req.params.id).emit("pocket:message-deleted", { pocketId: req.params.id, messageId: String(req.params.messageId) });
+  res.json({ ok: true });
+}));
 app.get("/api/pockets/:id/messages", requireAuth, asyncRoute(async function (req, res) {
   if (!await requirePocketAccess(req.params.id, req.user.id)) return res.status(404).json({ error: "Pocket not found." });
   const limit = Math.max(1, Math.min(100, Number(req.query.limit || 60)));
