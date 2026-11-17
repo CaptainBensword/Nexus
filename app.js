@@ -256,7 +256,9 @@ function renderMessagesHTML(messages){
   if(!messages||!messages.length)return '<div class="message-empty">Nothing here yet. Start the conversation.</div>';
   return messages.map(function(message){
     var who=message.user||{displayName:"Unknown",id:""};
-    return '<article class="chat-message"><div class="chat-avatar">'+escapeHTML((who.displayName||who.username||"?").slice(0,1).toUpperCase())+'</div><div class="chat-copy"><div class="chat-meta"><b>'+escapeHTML(who.displayName||who.username||"Unknown")+'</b><time>'+escapeHTML(dateLabel(message.createdAt))+'</time></div><div class="chat-body">'+escapeHTML(message.body)+'</div></div></article>';
+    var canReport=!!who.id&&who.id!==state.user.id&&!state.demo;
+    var controls=canReport?'<div class="message-tools"><button class="message-report" data-action="report-user" data-user="'+escapeHTML(who.id)+'">Report user</button>'+(state.page==="chambers"&&state.chamber?'<button class="message-report" data-action="report-pocket-message" data-message="'+escapeHTML(message.id)+'">Report message</button>':'')+'</div>':'';
+    return '<article class="chat-message"><div class="chat-avatar">'+escapeHTML((who.displayName||who.username||"?").slice(0,1).toUpperCase())+'</div><div class="chat-copy"><div class="chat-meta"><b>'+escapeHTML(who.displayName||who.username||"Unknown")+'</b><time>'+escapeHTML(dateLabel(message.createdAt))+'</time></div><div class="chat-body">'+escapeHTML(message.body)+'</div>'+controls+'</div></article>';
   }).join("");
 }
 function drawPocketMessages(scroll){
