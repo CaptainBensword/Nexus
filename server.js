@@ -70,6 +70,7 @@ app.use("/api", function checkOrigin(req, res, next) {
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 12, standardHeaders: "draft-8", legacyHeaders: false, message: { error: "Too many attempts. Please wait a little and try again." } });
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, limit: 90, standardHeaders: "draft-8", legacyHeaders: false });
+const reportLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: "draft-8", legacyHeaders: false, message: { error: "You have submitted several reports recently. Please wait before sending another." } });
 
 function hashToken(token) {
   return crypto.createHmac("sha256", SESSION_SECRET).update(token).digest("hex");
@@ -311,7 +312,7 @@ app.post("/api/users/:userId/block", requireAuth, asyncRoute(async function (req
   await pool.query("DELETE FROM dm_conversations WHERE (user_one=$1 AND user_two=$2) OR (user_one=$2 AND user_two=$1)", [req.user.id, req.params.userId]);
   res.json({ ok: true });
 }));
-app.post("/api/reports", requireAuth, writeLimiter, asyncRoute(async function (req, res) {
+app.post("/api/reports", requireAuth, reportLimiter, asyncRoute(async function (req, res) {
   let targetUserId = req.body.targetUserId ? String(req.body.targetUserId) : null;
   let chamberId = req.body.chamberId ? String(req.body.chamberId) : null;
   let messageId = req.body.messageId ? String(req.body.messageId) : null;
@@ -329,6 +330,8 @@ app.post("/api/reports", requireAuth, writeLimiter, asyncRoute(async function (r
     chamberId = found.rows[0].chamber_id;
   }
   if (!targetUserId || targetUserId === req.user.id) return res.status(400).json({ error: "Choose another user or message to report." });
+  const targetExists = await pool.query("SELECT 1 FROM users WHERE id=$1", [targetUserId]);
+  if (!targetExists.rowCount) return res.status(404).json({ error: "That user is no longer available." });
   const id = crypto.randomUUID();
   await pool.query("INSERT INTO user_reports(id,reporter_id,target_user_id,chamber_id,message_id,reason,details) VALUES($1,$2,$3,$4,$5,$6,$7)", [id, req.user.id, targetUserId, chamberId, messageId, reason, details]);
   res.status(201).json({ ok: true, id: id });
