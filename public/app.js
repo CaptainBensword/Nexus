@@ -95,7 +95,7 @@ function enterReal(user){
   state.demo=false;
   state.user=user;
   state.page="home";
-  return refreshAll().then(function(){enterApp();connectSocket();});
+  return refreshAll().then(function(){enterApp();connectSocket();startFromQuery();});
 }
 function enterApp(){
   $("#login").classList.add("hidden");
@@ -753,7 +753,7 @@ function init(){
     if(error&&error.message&&/session|log in/i.test(error.message)){state.apiAvailable=true;return;}
     state.apiAvailable=false;
     if(error&&error.message&&error.message!=="API route not found.")showLoginNote("Account service is not available right now. Admin preview is still available.");
-  }).finally(function(){startFromQuery();});
+  });
 }
 init();
 })();
