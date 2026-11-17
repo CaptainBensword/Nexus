@@ -375,10 +375,8 @@ function sendPocketMessage(body){
     state.pocketMessages=messages;drawPocketMessages(true);return Promise.resolve();
   }
   return api("/pockets/"+encodeURIComponent(state.selectedPocket.id)+"/messages","POST",{body:body}).then(function(result){
-    if(!state.socket||!state.socket.connected){
-      if(!state.pocketMessages.some(function(item){return String(item.id)===String(result.message.id)}))state.pocketMessages.push(result.message);
-      drawPocketMessages(true);
-    }
+    if(!state.pocketMessages.some(function(item){return String(item.id)===String(result.message.id)}))state.pocketMessages.push(result.message);
+    drawPocketMessages(true);
   });
 }
 function loadConversations(){
@@ -413,10 +411,8 @@ function sendDM(body){
     demo.dmMessages[state.conversation.id]=messages;saveDemo();state.dmMessages=messages;drawDMMessages(true);return Promise.resolve();
   }
   return api("/conversations/"+encodeURIComponent(state.conversation.id)+"/messages","POST",{body:body}).then(function(result){
-    if(!state.socket||!state.socket.connected){
-      if(!state.dmMessages.some(function(item){return String(item.id)===String(result.message.id)}))state.dmMessages.push(result.message);
-      drawDMMessages(true);
-    }
+    if(!state.dmMessages.some(function(item){return String(item.id)===String(result.message.id)}))state.dmMessages.push(result.message);
+    drawDMMessages(true);
   });
 }
 function refreshAndRender(){
