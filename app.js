@@ -77,7 +77,6 @@ function showLogin(){
 function enterDemo(){
   disconnectSocket();
   state.demo=true;
-  state.apiAvailable=false;
   state.user={id:"demo-user",username:"admin",displayName:demo.displayName||"Admin Preview"};
   state.friends=demo.friends;
   state.incoming=[];
