@@ -829,7 +829,7 @@ function init(){
   }).catch(function(error){
     if(error&&error.message&&/session|log in/i.test(error.message)){state.apiAvailable=true;return;}
     state.apiAvailable=false;
-    if(error&&error.message&&error.message!=="API route not found.")showLoginNote("Account service is not available right now. Admin preview is still available.");
+    // Keep the login screen quiet on static preview hosts; the form explains the backend requirement when used.
   });
 }
 init();
