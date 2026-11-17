@@ -38,7 +38,23 @@ const SESSION_SECRET = process.env.SESSION_SECRET || "local-development-only-cha
 
 app.set("trust proxy", process.env.TRUST_PROXY === "true" ? 1 : false);
 app.disable("x-powered-by");
-app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      baseUri: ["'self'"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+      fontSrc: ["'self'", "data:"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],
+      imgSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'"]
+    }
+  },
+  crossOriginEmbedderPolicy: false
+}));
 app.use(express.json({ limit: "40kb" }));
 app.use(cookieParser());
 
@@ -105,8 +121,8 @@ async function issueSession(client, userId, res) {
   const token = crypto.randomBytes(32).toString("base64url");
   const tokenHash = hashToken(token);
   await client.query(
-    "INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+($3 || ' days')::interval)",
-    [tokenHash, userId, String(SESSION_DAYS)]
+    "INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+($3::int * interval '1 day'))",
+    [tokenHash, userId, SESSION_DAYS]
   );
   res.cookie(COOKIE_NAME, token, makeCookieOptions());
 }
@@ -498,7 +514,7 @@ app.get("/api/conversations/:id/messages", requireAuth, asyncRoute(async functio
 }));
 
 app.use("/api", function (req, res) { res.status(404).json({ error: "API route not found." }); });
-app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"], maxAge: process.env.NODE_ENV === "production" ? "1h" : 0 }));
+app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"], maxAge: 0, etag: true, lastModified: true }));
 app.get(/^\/(?!api\/).*/, function (req, res) { res.sendFile(path.join(__dirname, "public", "index.html")); });
 
 app.use(function (error, req, res, next) {
