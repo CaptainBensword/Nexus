@@ -185,10 +185,16 @@ function logout(){
       showLoginNote("");
     });
 }
+function leaveCurrentPocket(){
+  if(state.socket&&state.selectedPocket)state.socket.emit("leave-pocket",state.selectedPocket.id);
+}
+function leaveCurrentDM(){
+  if(state.socket&&state.conversation)state.socket.emit("leave-dm",state.conversation.id);
+}
 function navTo(page){
+  if(page!=="chambers"){leaveCurrentPocket();state.chamber=null;state.selectedPocket=null;}
+  if(page!=="messages"){leaveCurrentDM();state.conversation=null;}
   state.page=page;
-  if(page!=="chambers"){state.chamber=null;state.selectedPocket=null;}
-  if(page!=="messages")state.conversation=null;
   render();
 }
 function navHTML(){
@@ -347,6 +353,8 @@ function setDemoPocketMessages(chamberId,pocketId,messages){
 }
 function demoFindChamber(id){return demo.chambers.find(function(chamber){return chamber.id===id;})||null;}
 function openChamber(id){
+  leaveCurrentPocket();
+  state.selectedPocket=null;
   state.page="chambers";
   if(state.demo){
     var chamber=demoFindChamber(id);
@@ -411,6 +419,8 @@ function loadConversations(){
   return api("/conversations").then(function(result){state.conversations=result.conversations||[];});
 }
 function openDM(friendId){
+  leaveCurrentDM();
+  state.conversation=null;
   var friend=state.friends.find(function(item){return item.id===friendId;});
   if(!friend)return;
   if(state.demo){
@@ -457,9 +467,11 @@ function openModal(type,data){
     html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Create a Chamber</h3><button class="modal-close" data-close-modal>×</button></div><form id="chamberForm" class="form-grid"><label class="form-label" for="chamberName">Name</label><input id="chamberName" class="form-input" maxlength="48" required placeholder="Name your Chamber"><label class="form-label">Choose an icon</label><input id="chamberEmoji" class="form-input" value="🏠" maxlength="12" aria-label="Chamber emoji"><div class="emoji-select-grid">'+EMOJIS.slice(0,64).map(function(e){return '<button type="button" class="emoji-select" data-select-emoji="'+e+'">'+e+'</button>';}).join("")+'</div><label class="form-label" for="chamberDescription">Description</label><textarea id="chamberDescription" class="form-textarea" maxlength="180" placeholder="What is this Chamber for?"></textarea><label class="form-label"><input id="chamberPublic" type="checkbox" style="width:auto;margin-right:7px">Make this Chamber discoverable</label><div class="modal-note">Private is the default. You can invite people with a code.</div><div class="modal-actions"><button type="button" class="soft-button" data-close-modal>Cancel</button><button class="primary-small" type="submit">Create Chamber</button></div></form></div></div>';
   }
   if(type==="pocket"){
+    state.editingPocket=null;
     html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Create a Pocket</h3><button class="modal-close" data-close-modal>×</button></div><form id="pocketForm" class="form-grid"><label class="form-label" for="pocketName">Pocket name</label><input id="pocketName" class="form-input" maxlength="32" required placeholder="general-chat"><label class="form-label" for="pocketEmoji">Pick an emoji</label><input id="pocketEmoji" class="form-input" value="💬" maxlength="12"><div class="emoji-select-grid">'+EMOJIS.map(function(e){return '<button type="button" class="emoji-select" data-select-emoji="'+e+'">'+e+'</button>';}).join("")+'</div><label class="form-label" for="pocketTopic">Topic (optional)</label><input id="pocketTopic" class="form-input" maxlength="120" placeholder="What belongs in this Pocket?"><div class="modal-actions"><button type="button" class="soft-button" data-close-modal>Cancel</button><button class="primary-small" type="submit">Create Pocket</button></div></form></div></div>';
   }
   if(type==="edit-pocket"){
+    state.editingPocket=data;
     html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Pocket settings</h3><button class="modal-close" data-close-modal>×</button></div><form id="editPocketForm" class="form-grid"><label class="form-label" for="editPocketName">Name</label><input id="editPocketName" class="form-input" maxlength="32" required value="'+escapeHTML(data.name)+'"><label class="form-label" for="editPocketEmoji">Emoji</label><input id="editPocketEmoji" class="form-input" maxlength="12" value="'+escapeHTML(data.emoji||"💬")+'"><div class="emoji-select-grid">'+EMOJIS.slice(0,72).map(function(e){return '<button type="button" class="emoji-select" data-select-emoji="'+e+'">'+e+'</button>';}).join("")+'</div><label class="form-label" for="editPocketTopic">Topic</label><input id="editPocketTopic" class="form-input" maxlength="120" value="'+escapeHTML(data.topic||"")+'"><div class="modal-actions" style="justify-content:space-between"><button type="button" class="danger-button" data-action="delete-pocket" data-pocket="'+escapeHTML(data.id)+'">Delete Pocket</button><span class="button-row"><button type="button" class="soft-button" data-close-modal>Cancel</button><button class="primary-small" type="submit">Save</button></span></div></form></div></div>';
   }
   if(type==="friend"){
@@ -543,13 +555,19 @@ function createPocket(data){
   });
 }
 function savePocket(data){
+  var pocketId=state.editingPocket?state.editingPocket.id:(state.selectedPocket&&state.selectedPocket.id);
+  if(!pocketId)return Promise.reject(new Error("Choose a Pocket to edit."));
   if(state.demo){
-    state.selectedPocket.name=data.name.toLowerCase().replace(/[^a-z0-9_-]+/g,"-");state.selectedPocket.emoji=data.emoji;state.selectedPocket.topic=data.topic;
-    saveDemo();closeModal();render();toast("Pocket updated in preview.");return Promise.resolve();
+    var demoPocket=state.chamber.pockets.find(function(pocket){return pocket.id===pocketId;});
+    if(!demoPocket)return Promise.reject(new Error("Pocket not found."));
+    demoPocket.name=data.name.toLowerCase().replace(/[^a-z0-9_-]+/g,"-");demoPocket.emoji=data.emoji;demoPocket.topic=data.topic;
+    if(state.selectedPocket&&state.selectedPocket.id===pocketId)state.selectedPocket=demoPocket;
+    saveDemo();closeModal();state.editingPocket=null;render();toast("Pocket updated in preview.");return Promise.resolve();
   }
-  return api("/pockets/"+encodeURIComponent(state.selectedPocket.id),"PATCH",data).then(function(result){
+  return api("/pockets/"+encodeURIComponent(pocketId),"PATCH",data).then(function(result){
     state.chamber.pockets=state.chamber.pockets.map(function(pocket){return pocket.id===result.pocket.id?result.pocket:pocket;});
-    state.selectedPocket=result.pocket;closeModal();render();toast("Pocket updated.");
+    if(state.selectedPocket&&state.selectedPocket.id===result.pocket.id)state.selectedPocket=result.pocket;
+    closeModal();state.editingPocket=null;render();toast("Pocket updated.");
   });
 }
 function deletePocket(id){
@@ -557,14 +575,22 @@ function deletePocket(id){
   if(!pocket)return;
   if(state.chamber.pockets.length<=1){toast("A Chamber needs at least one Pocket.");return;}
   if(!confirm("Delete #"+pocket.name+" and its messages?"))return;
+  var wasSelected=!!(state.selectedPocket&&state.selectedPocket.id===id);
+  if(wasSelected&&state.socket)state.socket.emit("leave-pocket",id);
   if(state.demo){
     state.chamber.pockets=state.chamber.pockets.filter(function(item){return item.id!==id;});
-    delete demo.messages[state.chamber.id+":"+id];state.selectedPocket=state.chamber.pockets[0];state.pocketMessages=demoPocketMessages(state.chamber.id,state.selectedPocket.id);saveDemo();closeModal();render();toast("Pocket deleted from preview.");return;
+    delete demo.messages[state.chamber.id+":"+id];
+    if(wasSelected)state.selectedPocket=state.chamber.pockets[0];
+    state.pocketMessages=demoPocketMessages(state.chamber.id,state.selectedPocket.id);
+    saveDemo();closeModal();render();toast("Pocket deleted from preview.");return;
   }
   api("/pockets/"+encodeURIComponent(id),"DELETE").then(function(){
     state.chamber.pockets=state.chamber.pockets.filter(function(item){return item.id!==id;});
-    state.selectedPocket=state.chamber.pockets[0];return loadPocketMessages();
-  }).then(function(){closeModal();render();toast("Pocket deleted.");}).catch(function(error){toast(error.message);});
+    if(wasSelected)state.selectedPocket=state.chamber.pockets[0];
+    return loadPocketMessages();
+  }).then(function(){
+    closeModal();render();joinCurrentPocket();toast("Pocket deleted.");
+  }).catch(function(error){toast(error.message);});
 }
 function saveChamber(data){
   if(state.demo){
@@ -578,6 +604,7 @@ function leaveChamber(){
   if(!state.chamber||state.chamber.role==="owner")return;
   var id=state.chamber.id;
   if(!confirm("Leave "+state.chamber.name+"? You will need an invite to return if it is private."))return;
+  leaveCurrentPocket();
   if(state.demo){
     demo.chambers=demo.chambers.filter(function(chamber){return chamber.id!==id;});
     Object.keys(demo.messages).forEach(function(key){if(key.indexOf(id+":")===0)delete demo.messages[key];});
@@ -589,6 +616,7 @@ function leaveChamber(){
 }
 function deleteChamber(){
   if(!state.chamber||!confirm("Delete this Chamber and all its Pockets and messages?"))return;
+  leaveCurrentPocket();
   var id=state.chamber.id;
   if(state.demo){
     demo.chambers=demo.chambers.filter(function(chamber){return chamber.id!==id;});
@@ -663,7 +691,7 @@ function handleAction(action,element){
   else if(action==="create-pocket")openPocketCreate();
   else if(action==="manage-chamber")openModal("manage-chamber");
   else if(action==="invite-chamber")inviteChamber();
-  else if(action==="back-chambers"){state.chamber=null;state.selectedPocket=null;render();}
+  else if(action==="back-chambers"){leaveCurrentPocket();state.chamber=null;state.selectedPocket=null;render();}
   else if(action==="edit-pocket"){var p=state.chamber&&state.chamber.pockets.find(function(item){return item.id===id;});if(p)openModal("edit-pocket",p);}
   else if(action==="delete-pocket")deletePocket(id);
   else if(action==="delete-chamber")deleteChamber();
