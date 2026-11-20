@@ -5,7 +5,7 @@ var $$ = function (selector, root) { return Array.prototype.slice.call((root || 
 var EMOJIS = ["😀","😃","😄","😁","😆","😅","😂","🤣","🥹","😊","🙂","😉","😍","🥰","😘","😎","🤩","🥳","😴","🤔","🫡","😭","😤","😱","🙌","👏","👍","👎","👋","🤝","🙏","💪","❤️","🧡","💛","💚","💙","💜","🖤","🤍","💔","✨","⭐","🌟","🔥","💯","🎉","🎊","🎯","🚀","⚡","☀️","🌙","🌈","☁️","🌊","🌲","🌻","🌸","🍀","🍎","🍕","🍔","🍟","🍩","🍪","☕","🧋","⚽","🏀","🎮","🕹️","🎧","🎵","🎸","📚","📖","📝","💡","🔔","📌","🏆","🎨","🧩","🛠️","💻","📷","🐶","🐱","🦊","🐻","🐼","🐸","🐙","🦋","🐢","🦖","🐉","👾","🤖","🏠","🏡","🌍","🗺️","🧭","🛡️","⚔️","🗡️","🪄","🔮","🎲","♟️","🏴‍☠️","🚩"];
 var state = {
   apiAvailable:false, demo:false, user:null, page:"home", authTab:"login",
-  friends:[], incoming:[], outgoing:[], chambers:[], discover:[], conversations:[],
+  friends:[], incoming:[], outgoing:[], blocked:[], chambers:[], discover:[], conversations:[],
   chamber:null, selectedPocket:null, pocketMessages:[],
   conversation:null, dmMessages:[], search:"",
   socket:null, heartbeat:null, emojiTarget:null
@@ -18,6 +18,7 @@ function loadDemo(){
     return {
       chambers:Array.isArray(saved.chambers)?saved.chambers:[],
       requests:Array.isArray(saved.requests)?saved.requests:[],
+      blocked:Array.isArray(saved.blocked)?saved.blocked:[],
       messages:saved.messages&&typeof saved.messages==="object"?saved.messages:{},
       friends:Array.isArray(saved.friends)?saved.friends:[],
       conversations:Array.isArray(saved.conversations)?saved.conversations:[],
@@ -25,7 +26,7 @@ function loadDemo(){
       displayName:typeof saved.displayName==="string"?saved.displayName:"Admin Preview"
     };
   } catch (error) {
-    return {chambers:[],requests:[],messages:{},friends:[],conversations:[],dmMessages:{},displayName:"Admin Preview"};
+    return {chambers:[],requests:[],blocked:[],messages:{},friends:[],conversations:[],dmMessages:{},displayName:"Admin Preview"};
   }
 }
 function saveDemo(){
@@ -81,6 +82,7 @@ function enterDemo(){
   state.friends=demo.friends;
   state.incoming=[];
   state.outgoing=demo.requests;
+  state.blocked=demo.blocked||[];
   state.chambers=demo.chambers;
   state.discover=[];
   state.conversations=demo.conversations;
@@ -107,15 +109,16 @@ function enterApp(){
 }
 function refreshAll(){
   if(state.demo){
-    state.friends=demo.friends;state.outgoing=demo.requests;state.chambers=demo.chambers;state.conversations=demo.conversations;
+    state.friends=demo.friends;state.outgoing=demo.requests;state.blocked=demo.blocked||[];state.chambers=demo.chambers;state.conversations=demo.conversations;
     return Promise.resolve();
   }
-  return Promise.all([api("/friends"),api("/chambers"),api("/conversations")]).then(function(results){
+  return Promise.all([api("/friends"),api("/chambers"),api("/conversations"),api("/blocks")]).then(function(results){
     state.friends=results[0].friends||[];
     state.incoming=results[0].incoming||[];
     state.outgoing=results[0].outgoing||[];
     state.chambers=results[1].chambers||[];
     state.conversations=results[2].conversations||[];
+    state.blocked=results[3].blocked||[];
     updateFriendBadge();
   });
 }
@@ -307,6 +310,8 @@ function renderSettings(){
     '<div class="setting-row"><div><div class="setting-label">Username</div><div class="setting-help">@'+escapeHTML(state.user.username)+'</div></div></div>'+
     '<div class="setting-row"><div><div class="setting-label">Password</div><div class="setting-help">Change your account password</div></div><button class="outline-button" data-action="change-password">Change</button></div>'+
     '<div class="setting-row"><div><div class="setting-label">Account system</div><div class="setting-help">'+(state.demo?"Local preview only":"Nexus custom account service")+'</div></div><span class="status-pill">'+(state.demo?"PREVIEW":"CONNECTED")+'</span></div>'+
+    '<div class="setting-row"><div><div class="setting-label">Blocked accounts</div><div class="setting-help">'+state.blocked.length+' blocked account'+(state.blocked.length===1?'':'s')+'</div></div></div>'+
+    (state.blocked.length?state.blocked.map(function(person){return '<div class="setting-row"><div><div class="setting-label">'+escapeHTML(person.displayName||person.username)+'</div><div class="setting-help">@'+escapeHTML(person.username)+'</div></div><button class="outline-button" data-action="unblock-user" data-user="'+escapeHTML(person.id)+'">Unblock</button></div>';}).join(""):'<div class="setting-row"><div class="setting-help">You have not blocked anyone.</div></div>')+
     '<div class="setting-row"><div><div class="setting-label">Sign out</div><div class="setting-help">End this session on this device</div></div><button class="danger-button" data-action="logout">Log Out</button></div>'+
     '<div class="setting-row"><div><div class="setting-label">'+(state.demo?"Clear preview":"Delete account")+'</div><div class="setting-help">'+(state.demo?"Remove the temporary data saved in this browser.":"Permanently delete your account, Chambers, messages, and connections.")+'</div></div><button class="danger-button" data-action="delete-account">'+(state.demo?"Clear":"Delete")+'</button></div>'+
     '</div>';
@@ -628,10 +633,20 @@ function removeRequest(id){
 }
 function removeFriend(id,block){
   if(state.demo){
-    demo.friends=demo.friends.filter(function(friend){return friend.id!==id;});state.friends=demo.friends;saveDemo();closeModal();render();toast(block?"Blocked in local preview.":"Removed in local preview.");return;
+    demo.friends=demo.friends.filter(function(friend){return friend.id!==id;});state.friends=demo.friends;
+    if(block){demo.blocked=demo.blocked||[];var target=demo.friends.find(function(friend){return friend.id===id;});if(target)demo.blocked.unshift(target);state.blocked=demo.blocked;}
+    saveDemo();closeModal();render();toast(block?"Blocked in local preview.":"Removed in local preview.");return;
   }
   var request=block?api("/users/"+encodeURIComponent(id)+"/block","POST",{}):api("/friends/"+encodeURIComponent(id),"DELETE");
   request.then(function(){closeModal();return refreshAll();}).then(render).then(function(){toast(block?"User blocked.":"Friend removed.");}).catch(function(error){toast(error.message);});
+}
+function unblockUser(id){
+  if(state.demo){
+    demo.blocked=demo.blocked||[];
+    demo.blocked=demo.blocked.filter(function(person){return person.id!==id;});
+    state.blocked=demo.blocked;saveDemo();render();toast("Unblocked in local preview.");return;
+  }
+  api("/blocks/"+encodeURIComponent(id),"DELETE").then(refreshAll).then(render).then(function(){toast("Account unblocked.");}).catch(function(error){toast(error.message);});
 }
 function copyInvite(){
   var input=$("#inviteCodeOutput");if(!input)return;
@@ -662,6 +677,7 @@ function handleAction(action,element){
   else if(action==="delete-pocket-message")deletePocketMessage(element.dataset.message);
   else if(action==="remove-friend")removeFriend(id,false);
   else if(action==="block-friend")removeFriend(id,true);
+  else if(action==="unblock-user")unblockUser(element.dataset.user);
   else if(action==="edit-profile")openModal("profile");
   else if(action==="change-password")openModal("password");
   else if(action==="delete-account")openModal("delete-account");
