@@ -575,15 +575,22 @@ function deletePocket(id){
   if(!pocket)return;
   if(state.chamber.pockets.length<=1){toast("A Chamber needs at least one Pocket.");return;}
   if(!confirm("Delete #"+pocket.name+" and its messages?"))return;
-  if(state.selectedPocket&&state.selectedPocket.id===id&&state.socket)state.socket.emit("leave-pocket",id);
+  var wasSelected=!!(state.selectedPocket&&state.selectedPocket.id===id);
+  if(wasSelected&&state.socket)state.socket.emit("leave-pocket",id);
   if(state.demo){
     state.chamber.pockets=state.chamber.pockets.filter(function(item){return item.id!==id;});
-    delete demo.messages[state.chamber.id+":"+id];state.selectedPocket=state.chamber.pockets[0];state.pocketMessages=demoPocketMessages(state.chamber.id,state.selectedPocket.id);saveDemo();closeModal();render();toast("Pocket deleted from preview.");return;
+    delete demo.messages[state.chamber.id+":"+id];
+    if(wasSelected)state.selectedPocket=state.chamber.pockets[0];
+    state.pocketMessages=demoPocketMessages(state.chamber.id,state.selectedPocket.id);
+    saveDemo();closeModal();render();toast("Pocket deleted from preview.");return;
   }
   api("/pockets/"+encodeURIComponent(id),"DELETE").then(function(){
     state.chamber.pockets=state.chamber.pockets.filter(function(item){return item.id!==id;});
-    state.selectedPocket=state.chamber.pockets[0];return loadPocketMessages();
-  }).then(function(){closeModal();render();toast("Pocket deleted.");}).catch(function(error){toast(error.message);});
+    if(wasSelected)state.selectedPocket=state.chamber.pockets[0];
+    return loadPocketMessages();
+  }).then(function(){
+    closeModal();render();joinCurrentPocket();toast("Pocket deleted.");
+  }).catch(function(error){toast(error.message);});
 }
 function saveChamber(data){
   if(state.demo){
