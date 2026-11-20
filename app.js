@@ -185,10 +185,16 @@ function logout(){
       showLoginNote("");
     });
 }
+function leaveCurrentPocket(){
+  if(state.socket&&state.selectedPocket)state.socket.emit("leave-pocket",state.selectedPocket.id);
+}
+function leaveCurrentDM(){
+  if(state.socket&&state.conversation)state.socket.emit("leave-dm",state.conversation.id);
+}
 function navTo(page){
+  if(page!=="chambers"){leaveCurrentPocket();state.chamber=null;state.selectedPocket=null;}
+  if(page!=="messages"){leaveCurrentDM();state.conversation=null;}
   state.page=page;
-  if(page!=="chambers"){state.chamber=null;state.selectedPocket=null;}
-  if(page!=="messages")state.conversation=null;
   render();
 }
 function navHTML(){
@@ -347,6 +353,8 @@ function setDemoPocketMessages(chamberId,pocketId,messages){
 }
 function demoFindChamber(id){return demo.chambers.find(function(chamber){return chamber.id===id;})||null;}
 function openChamber(id){
+  leaveCurrentPocket();
+  state.selectedPocket=null;
   state.page="chambers";
   if(state.demo){
     var chamber=demoFindChamber(id);
@@ -411,6 +419,8 @@ function loadConversations(){
   return api("/conversations").then(function(result){state.conversations=result.conversations||[];});
 }
 function openDM(friendId){
+  leaveCurrentDM();
+  state.conversation=null;
   var friend=state.friends.find(function(item){return item.id===friendId;});
   if(!friend)return;
   if(state.demo){
@@ -565,6 +575,7 @@ function deletePocket(id){
   if(!pocket)return;
   if(state.chamber.pockets.length<=1){toast("A Chamber needs at least one Pocket.");return;}
   if(!confirm("Delete #"+pocket.name+" and its messages?"))return;
+  if(state.selectedPocket&&state.selectedPocket.id===id&&state.socket)state.socket.emit("leave-pocket",id);
   if(state.demo){
     state.chamber.pockets=state.chamber.pockets.filter(function(item){return item.id!==id;});
     delete demo.messages[state.chamber.id+":"+id];state.selectedPocket=state.chamber.pockets[0];state.pocketMessages=demoPocketMessages(state.chamber.id,state.selectedPocket.id);saveDemo();closeModal();render();toast("Pocket deleted from preview.");return;
@@ -586,6 +597,7 @@ function leaveChamber(){
   if(!state.chamber||state.chamber.role==="owner")return;
   var id=state.chamber.id;
   if(!confirm("Leave "+state.chamber.name+"? You will need an invite to return if it is private."))return;
+  leaveCurrentPocket();
   if(state.demo){
     demo.chambers=demo.chambers.filter(function(chamber){return chamber.id!==id;});
     Object.keys(demo.messages).forEach(function(key){if(key.indexOf(id+":")===0)delete demo.messages[key];});
@@ -597,6 +609,7 @@ function leaveChamber(){
 }
 function deleteChamber(){
   if(!state.chamber||!confirm("Delete this Chamber and all its Pockets and messages?"))return;
+  leaveCurrentPocket();
   var id=state.chamber.id;
   if(state.demo){
     demo.chambers=demo.chambers.filter(function(chamber){return chamber.id!==id;});
@@ -671,7 +684,7 @@ function handleAction(action,element){
   else if(action==="create-pocket")openPocketCreate();
   else if(action==="manage-chamber")openModal("manage-chamber");
   else if(action==="invite-chamber")inviteChamber();
-  else if(action==="back-chambers"){state.chamber=null;state.selectedPocket=null;render();}
+  else if(action==="back-chambers"){leaveCurrentPocket();state.chamber=null;state.selectedPocket=null;render();}
   else if(action==="edit-pocket"){var p=state.chamber&&state.chamber.pockets.find(function(item){return item.id===id;});if(p)openModal("edit-pocket",p);}
   else if(action==="delete-pocket")deletePocket(id);
   else if(action==="delete-chamber")deleteChamber();
