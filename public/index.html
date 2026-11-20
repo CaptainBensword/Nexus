@@ -3,83 +3,50 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#080708">
-<title>Nexus</title>
+<meta name="theme-color" content="#09090b">
+<title>Nexus — Command Deck</title>
 <link rel="icon" href="assets/kit-head.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<section id="login" class="login-screen">
-  <div class="login-bg"></div>
-  <div class="login-card">
-    <img class="login-logo" src="assets/nexus-mark.svg" alt="Nexus">
-    <div class="auth-tabs" role="tablist" aria-label="Account">
-      <button class="auth-tab active" type="button" data-auth-tab="login">Log In</button>
-      <button class="auth-tab" type="button" data-auth-tab="register">Create Account</button>
-    </div>
-    <form id="authForm" class="auth-form">
-      <div id="registerFields" class="hidden">
-        <label class="sr-only" for="authUsername">Username</label>
-        <input id="authUsername" name="username" class="auth-input" maxlength="24" autocomplete="username" placeholder="Username">
-        <label class="sr-only" for="authDisplayName">Display name</label>
-        <input id="authDisplayName" name="displayName" class="auth-input" maxlength="32" autocomplete="nickname" placeholder="Display name">
-        <label class="sr-only" for="authEmail">Email</label>
-        <input id="authEmail" name="email" class="auth-input" type="email" maxlength="254" autocomplete="email" placeholder="Email">
-      </div>
-      <div id="loginFields">
-        <label class="sr-only" for="authLogin">Username or email</label>
-        <input id="authLogin" name="login" class="auth-input" autocomplete="username" placeholder="Username or Email">
-      </div>
-      <div class="password-wrap">
-        <label class="sr-only" for="authPassword">Password</label>
-        <input id="authPassword" name="password" class="auth-input" type="password" autocomplete="current-password" placeholder="Password">
-        <button id="togglePassword" class="password-toggle" type="button" aria-label="Show password" title="Show password">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
-        </button>
-      </div>
-      <button id="authSubmit" class="primary-button" type="submit">Log In</button>
-    </form>
-    <div class="auth-separator"><span>or</span></div>
-    <button id="adminEntry" class="admin-button" type="button">Admin</button>
-    <div id="loginNote" class="login-note" aria-live="polite"></div>
-  </div>
-</section>
-<section id="app" class="app-shell hidden" aria-label="Nexus">
+<div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+<div class="app-frame">
   <aside class="sidebar">
-    <div class="brand">
-      <img src="assets/kit-head.svg" alt="Kit" class="brand-avatar">
-      <div class="brand-copy"><strong>Nexus</strong><span>Social</span></div>
-    </div>
-    <nav id="mainNav" class="main-nav" aria-label="Main navigation">
-      <button class="nav-button active" data-page="home"><span class="nav-icon">⌂</span>Home</button>
-      <button class="nav-button" data-page="friends"><span class="nav-icon">♧</span>Friends<span id="friendBadge" class="nav-badge hidden"></span></button>
-      <button class="nav-button" data-page="chambers"><span class="nav-icon">▦</span>Chambers</button>
-      <button class="nav-button" data-page="messages"><span class="nav-icon">▤</span>Messages</button>
+    <a class="brand" href="#" aria-label="Nexus home">
+      <span class="brand-mark"><span></span><span></span><span></span></span>
+      <span class="brand-name">nexus<span> / deck</span></span>
+    </a>
+    <div class="side-label">WORKSPACE</div>
+    <nav class="side-nav" aria-label="Main navigation">
+      <button class="nav-item active" data-view="overview"><span class="nav-symbol">⌂</span>Overview <kbd>1</kbd></button>
+      <button class="nav-item" data-view="projects"><span class="nav-symbol">◈</span>Projects <kbd>2</kbd></button>
+      <button class="nav-item" data-view="tasks"><span class="nav-symbol">☷</span>Tasks <kbd>3</kbd></button>
+      <button class="nav-item" data-view="notes"><span class="nav-symbol">▤</span>Notes <kbd>4</kbd></button>
+    </nav>
+    <div class="side-label side-label-spaced">PERSONAL</div>
+    <nav class="side-nav">
+      <button class="nav-item" data-view="focus"><span class="nav-symbol">◷</span>Focus <span class="nav-live"></span></button>
+      <button class="nav-item" data-view="library"><span class="nav-symbol">▧</span>Library</button>
     </nav>
     <div class="sidebar-bottom">
-      <div class="profile">
-        <div id="profileAvatar" class="profile-avatar">N</div>
-        <div class="profile-info"><strong id="profileName">Preview</strong><span id="profileStatus"><i class="online-dot"></i>Preview mode</span></div>
-        <button id="settingsButton" class="icon-button" type="button" aria-label="Settings" title="Settings">⚙</button>
-      </div>
-      <button id="logoutButton" class="logout-button" type="button">Log Out</button>
+      <div class="status-card"><span class="status-orb"></span><div><strong>All systems ready</strong><small>Your space is saved locally</small></div></div>
+      <button class="profile-button" id="profileButton"><img src="assets/kit-head.svg" alt=""><span><strong>My workspace</strong><small>Personal deck</small></span><b>⌄</b></button>
     </div>
   </aside>
-  <main class="main-panel">
+  <main class="main">
     <header class="topbar">
-      <div class="topbar-title"><span id="pageEyebrow">YOUR SPACE</span><h1 id="pageTitle">Home</h1></div>
-      <div class="topbar-actions">
-        <span id="previewFlag" class="preview-flag hidden">PREVIEW</span>
-        <label class="global-search"><span aria-hidden="true">⌕</span><input id="globalSearch" type="search" placeholder="Search Chambers" autocomplete="off"></label>
-        <button id="quickAddFriend" class="top-action" type="button" title="Add a friend">＋</button>
-      </div>
+      <div class="breadcrumb"><span>NEXUS</span><i>/</i><strong id="crumb">OVERVIEW</strong></div>
+      <div class="top-actions"><span class="date-chip" id="dateChip"></span><button class="icon-action" id="searchButton" aria-label="Search" title="Search">⌕</button><button class="new-button" id="quickCreate"><span>＋</span> New</button></div>
     </header>
-    <div id="view" class="view-area"></div>
+    <section class="content" id="content" aria-live="polite"></section>
+    <footer class="footer"><span>NEXUS DECK <i>—</i> BUILT FOR YOUR NEXT MOVE</span><span><b class="footer-dot"></b> LOCAL WORKSPACE</span></footer>
   </main>
-  <aside id="rightRail" class="right-rail"></aside>
-</section>
-<div id="modalRoot"></div>
-<div id="toastRoot" aria-live="polite"></div>
+</div>
+<div class="modal-layer" id="modalLayer" aria-hidden="true"></div>
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
 <script src="app.js" defer></script>
 </body>
 </html>
