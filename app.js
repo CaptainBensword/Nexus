@@ -417,7 +417,9 @@ function openDM(friendId){
   }
   api("/conversations","POST",{friendId:friendId}).then(function(result){
     return api("/conversations").then(function(list){
-      state.conversations=list.conversations||[];
+      state.conversations=(list.conversations||[]).map(function(item){
+        return {id:item.id,friendId:item.friend_id,username:item.username,displayName:item.display_name,lastBody:item.last_body,lastAt:item.last_at};
+      });
       var found=state.conversations.find(function(item){return item.id===result.conversationId;});
       state.conversation=found||{id:result.conversationId,friendId:friend.id,username:friend.username,displayName:friend.displayName};
       if(state.socket&&state.socket.connected)state.socket.emit("join-dm",state.conversation.id);
