@@ -26,6 +26,7 @@ for (const route of [
   '/api/auth/login',
   '/api/auth/account',
   '/api/friends/requests',
+  '/api/blocks',
   '/api/chambers',
   '/api/chambers/:id/pockets',
   '/api/pockets/:id/messages',
@@ -41,7 +42,8 @@ for (const feature of [
   'Create a Pocket',
   'report-pocket-message',
   'delete-pocket-message',
-  'delete-account'
+  'delete-account',
+  'unblock-user'
 ]) {
   assert.ok(app.includes(feature) || html.includes(feature), "Missing frontend feature: " + feature);
 }
