@@ -315,7 +315,7 @@ app.delete("/api/friends/:friendId", requireAuth, asyncRoute(async function (req
   await pool.query("DELETE FROM dm_conversations WHERE (user_one=$1 AND user_two=$2) OR (user_one=$2 AND user_two=$1)", [req.user.id, req.params.friendId]);
   res.json({ ok: true });
 }));
-app.post("/api/users/:userId/block", requireAuth, asyncRoute(async function (req, res) {
+app.post("/api/users/:userId/block", requireAuth, writeLimiter, asyncRoute(async function (req, res) {
   if (req.params.userId === req.user.id) return res.status(400).json({ error: "You cannot block yourself." });
   await pool.query("INSERT INTO blocked_users(blocker_id,blocked_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [req.user.id, req.params.userId]);
   await pool.query("DELETE FROM friendships WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)", [req.user.id, req.params.userId]);
@@ -373,7 +373,7 @@ app.get("/api/chambers/discover", requireAuth, asyncRoute(async function (req, r
   );
   res.json({ chambers: result.rows });
 }));
-app.post("/api/chambers/:id/join", requireAuth, asyncRoute(async function (req, res) {
+app.post("/api/chambers/:id/join", requireAuth, writeLimiter, asyncRoute(async function (req, res) {
   const chamber = await pool.query("SELECT id,is_public FROM chambers WHERE id=$1", [req.params.id]);
   if (!chamber.rowCount) return res.status(404).json({ error: "Chamber not found." });
   if (!chamber.rows[0].is_public) return res.status(403).json({ error: "This Chamber is private. Ask a member for an invite code." });
@@ -432,13 +432,13 @@ app.delete("/api/chambers/:id/leave", requireAuth, asyncRoute(async function (re
   await pool.query("DELETE FROM chamber_members WHERE chamber_id=$1 AND user_id=$2", [req.params.id, req.user.id]);
   res.json({ ok: true });
 }));
-app.post("/api/chambers/:id/invites", requireAuth, asyncRoute(async function (req, res) {
+app.post("/api/chambers/:id/invites", requireAuth, writeLimiter, asyncRoute(async function (req, res) {
   if (!await requireChamberRole(req.params.id, req.user.id, ["owner","moderator","member"])) return res.status(403).json({ error: "Join this Chamber before creating an invite link." });
   const code = crypto.randomBytes(6).toString("base64url");
   await pool.query("INSERT INTO chamber_invites(code,chamber_id,created_by,expires_at,max_uses) VALUES($1,$2,$3,now()+interval '7 days',50)", [code, req.params.id, req.user.id]);
   res.status(201).json({ code: code, expiresInDays: 7, inviteUrl: "/?join=" + code });
 }));
-app.post("/api/chambers/join", requireAuth, asyncRoute(async function (req, res) {
+app.post("/api/chambers/join", requireAuth, writeLimiter, asyncRoute(async function (req, res) {
   const code = String(req.body.code || "").trim();
   if (!/^[A-Za-z0-9_-]{6,24}$/.test(code)) return res.status(400).json({ error: "Enter a valid invite code." });
   const client = await pool.connect();
