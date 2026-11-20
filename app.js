@@ -633,8 +633,9 @@ function removeRequest(id){
 }
 function removeFriend(id,block){
   if(state.demo){
+    var target=demo.friends.find(function(friend){return friend.id===id;});
     demo.friends=demo.friends.filter(function(friend){return friend.id!==id;});state.friends=demo.friends;
-    if(block){demo.blocked=demo.blocked||[];var target=demo.friends.find(function(friend){return friend.id===id;});if(target)demo.blocked.unshift(target);state.blocked=demo.blocked;}
+    if(block&&target){demo.blocked=demo.blocked||[];if(!demo.blocked.some(function(person){return person.id===id;}))demo.blocked.unshift(target);state.blocked=demo.blocked;}
     saveDemo();closeModal();render();toast(block?"Blocked in local preview.":"Removed in local preview.");return;
   }
   var request=block?api("/users/"+encodeURIComponent(id)+"/block","POST",{}):api("/friends/"+encodeURIComponent(id),"DELETE");
@@ -780,7 +781,8 @@ document.addEventListener("submit",function(event){
     event.preventDefault();
     if(state.demo){
       try{localStorage.removeItem("nexus-demo-data");localStorage.removeItem("nexus-preview-seen");localStorage.removeItem("nexus-preview-profile");}catch(error){}
-      demo={chambers:[],requests:[],messages:{},friends:[],conversations:[],reports:[],dmMessages:{},displayName:"Admin Preview"};
+      demo={chambers:[],requests:[],blocked:[],messages:{},friends:[],conversations:[],reports:[],dmMessages:{},displayName:"Admin Preview"};
+      state.blocked=[];
       state.user=null;state.demo=false;state.chamber=null;state.conversation=null;closeModal();showLogin();toast("Preview data cleared.");return;
     }
     api("/auth/account","DELETE",{password:$("#deleteAccountPassword").value}).then(function(){
