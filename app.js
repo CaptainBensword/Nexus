@@ -457,9 +457,11 @@ function openModal(type,data){
     html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Create a Chamber</h3><button class="modal-close" data-close-modal>×</button></div><form id="chamberForm" class="form-grid"><label class="form-label" for="chamberName">Name</label><input id="chamberName" class="form-input" maxlength="48" required placeholder="Name your Chamber"><label class="form-label">Choose an icon</label><input id="chamberEmoji" class="form-input" value="🏠" maxlength="12" aria-label="Chamber emoji"><div class="emoji-select-grid">'+EMOJIS.slice(0,64).map(function(e){return '<button type="button" class="emoji-select" data-select-emoji="'+e+'">'+e+'</button>';}).join("")+'</div><label class="form-label" for="chamberDescription">Description</label><textarea id="chamberDescription" class="form-textarea" maxlength="180" placeholder="What is this Chamber for?"></textarea><label class="form-label"><input id="chamberPublic" type="checkbox" style="width:auto;margin-right:7px">Make this Chamber discoverable</label><div class="modal-note">Private is the default. You can invite people with a code.</div><div class="modal-actions"><button type="button" class="soft-button" data-close-modal>Cancel</button><button class="primary-small" type="submit">Create Chamber</button></div></form></div></div>';
   }
   if(type==="pocket"){
+    state.editingPocket=null;
     html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Create a Pocket</h3><button class="modal-close" data-close-modal>×</button></div><form id="pocketForm" class="form-grid"><label class="form-label" for="pocketName">Pocket name</label><input id="pocketName" class="form-input" maxlength="32" required placeholder="general-chat"><label class="form-label" for="pocketEmoji">Pick an emoji</label><input id="pocketEmoji" class="form-input" value="💬" maxlength="12"><div class="emoji-select-grid">'+EMOJIS.map(function(e){return '<button type="button" class="emoji-select" data-select-emoji="'+e+'">'+e+'</button>';}).join("")+'</div><label class="form-label" for="pocketTopic">Topic (optional)</label><input id="pocketTopic" class="form-input" maxlength="120" placeholder="What belongs in this Pocket?"><div class="modal-actions"><button type="button" class="soft-button" data-close-modal>Cancel</button><button class="primary-small" type="submit">Create Pocket</button></div></form></div></div>';
   }
   if(type==="edit-pocket"){
+    state.editingPocket=data;
     html='<div class="modal-backdrop" data-close-modal><div class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h3>Pocket settings</h3><button class="modal-close" data-close-modal>×</button></div><form id="editPocketForm" class="form-grid"><label class="form-label" for="editPocketName">Name</label><input id="editPocketName" class="form-input" maxlength="32" required value="'+escapeHTML(data.name)+'"><label class="form-label" for="editPocketEmoji">Emoji</label><input id="editPocketEmoji" class="form-input" maxlength="12" value="'+escapeHTML(data.emoji||"💬")+'"><div class="emoji-select-grid">'+EMOJIS.slice(0,72).map(function(e){return '<button type="button" class="emoji-select" data-select-emoji="'+e+'">'+e+'</button>';}).join("")+'</div><label class="form-label" for="editPocketTopic">Topic</label><input id="editPocketTopic" class="form-input" maxlength="120" value="'+escapeHTML(data.topic||"")+'"><div class="modal-actions" style="justify-content:space-between"><button type="button" class="danger-button" data-action="delete-pocket" data-pocket="'+escapeHTML(data.id)+'">Delete Pocket</button><span class="button-row"><button type="button" class="soft-button" data-close-modal>Cancel</button><button class="primary-small" type="submit">Save</button></span></div></form></div></div>';
   }
   if(type==="friend"){
@@ -543,13 +545,19 @@ function createPocket(data){
   });
 }
 function savePocket(data){
+  var pocketId=state.editingPocket?state.editingPocket.id:(state.selectedPocket&&state.selectedPocket.id);
+  if(!pocketId)return Promise.reject(new Error("Choose a Pocket to edit."));
   if(state.demo){
-    state.selectedPocket.name=data.name.toLowerCase().replace(/[^a-z0-9_-]+/g,"-");state.selectedPocket.emoji=data.emoji;state.selectedPocket.topic=data.topic;
-    saveDemo();closeModal();render();toast("Pocket updated in preview.");return Promise.resolve();
+    var demoPocket=state.chamber.pockets.find(function(pocket){return pocket.id===pocketId;});
+    if(!demoPocket)return Promise.reject(new Error("Pocket not found."));
+    demoPocket.name=data.name.toLowerCase().replace(/[^a-z0-9_-]+/g,"-");demoPocket.emoji=data.emoji;demoPocket.topic=data.topic;
+    if(state.selectedPocket&&state.selectedPocket.id===pocketId)state.selectedPocket=demoPocket;
+    saveDemo();closeModal();state.editingPocket=null;render();toast("Pocket updated in preview.");return Promise.resolve();
   }
-  return api("/pockets/"+encodeURIComponent(state.selectedPocket.id),"PATCH",data).then(function(result){
+  return api("/pockets/"+encodeURIComponent(pocketId),"PATCH",data).then(function(result){
     state.chamber.pockets=state.chamber.pockets.map(function(pocket){return pocket.id===result.pocket.id?result.pocket:pocket;});
-    state.selectedPocket=result.pocket;closeModal();render();toast("Pocket updated.");
+    if(state.selectedPocket&&state.selectedPocket.id===result.pocket.id)state.selectedPocket=result.pocket;
+    closeModal();state.editingPocket=null;render();toast("Pocket updated.");
   });
 }
 function deletePocket(id){
