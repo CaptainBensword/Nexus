@@ -657,6 +657,9 @@ io.on("connection", function (socket) {
     socket.join("dm:" + conversationId);
     if (typeof ack === "function") ack({ ok: true });
   });
+  socket.on("leave-dm", function (conversationId) {
+    socket.leave("dm:" + String(conversationId));
+  });
   socket.on("dm-message", async function (payload, ack) {
     try {
       const now = Date.now();
