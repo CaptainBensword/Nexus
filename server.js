@@ -323,6 +323,15 @@ app.post("/api/users/:userId/block", requireAuth, asyncRoute(async function (req
   await pool.query("DELETE FROM dm_conversations WHERE (user_one=$1 AND user_two=$2) OR (user_one=$2 AND user_two=$1)", [req.user.id, req.params.userId]);
   res.json({ ok: true });
 }));
+app.get("/api/blocks", requireAuth, asyncRoute(async function (req, res) {
+  const result = await pool.query("SELECT u.id,u.username,u.display_name,b.created_at FROM blocked_users b JOIN users u ON u.id=b.blocked_id WHERE b.blocker_id=$1 ORDER BY b.created_at DESC", [req.user.id]);
+  res.json({ blocked: result.rows.map(function (row) { return { id: row.id, username: row.username, displayName: row.display_name, blockedAt: row.created_at }; }) });
+}));
+app.delete("/api/blocks/:userId", requireAuth, asyncRoute(async function (req, res) {
+  await pool.query("DELETE FROM blocked_users WHERE blocker_id=$1 AND blocked_id=$2", [req.user.id, req.params.userId]);
+  res.json({ ok: true });
+}));
+
 app.post("/api/reports", requireAuth, reportLimiter, asyncRoute(async function (req, res) {
   let targetUserId = req.body.targetUserId ? String(req.body.targetUserId) : null;
   let chamberId = req.body.chamberId ? String(req.body.chamberId) : null;
