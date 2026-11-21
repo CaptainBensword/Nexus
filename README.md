@@ -1,44 +1,59 @@
 # Nexus
 
-Nexus is a personal project workspace
-
-It keeps four things together
-
-- **Projects** — the larger things you are making
-- **Tasks** — the next actions for each project
-- **Notes** — decisions, ideas and details worth keeping
-- **Focus** — a small timer for quiet work sessions
+Nexus is a focus workspace with a timer, ambient sound, projects, tasks and notes
 
 ## Open Nexus
 
 https://captainbensword.github.io/Nexus/
 
-A short first-run tour explains how the parts fit together
+A new workspace starts empty
 
-## How to use it
+## Focus
 
-1. Create a project and give it a name and a short description
-2. Open the project and add tasks that belong to it
-3. Add notes to keep useful details beside the project
-4. Use the Home page to see your projects, next steps and recent notes
+The Focus page is the main screen
 
-The top **Add new** button lets you create a project, task or note from anywhere
+- Choose a 10, 25 or 45 minute session
+- Optionally select a task to work on
+- Start, pause or reset the timer
+- The timer keeps running while you move to another page
 
-## Data and privacy
+A small timer indicator stays in the top bar while a session is running
 
-Nexus is local-first and does not require an account
+## Ambient sound
 
-Your workspace is saved in this browser on this device
-It does not sync between devices or share your information with other people
+Use **Sound** in the top bar to choose:
 
-Use **Workspace → Export workspace** to save a JSON backup
-Resetting browser site data can erase the local copy, so export a backup first
+- Soft rain
+- Brown noise
+- Wind
+- Fireplace
+
+Press **Play** once to start audio. Browsers require a user action before a website can play sound
+
+The sound continues while navigating between Nexus pages. The soundscapes are generated locally with the Web Audio API; no audio files are downloaded or streamed. Scene and volume preferences are saved in this browser
+
+## Projects, tasks and notes
+
+Projects can group related tasks and notes
+
+Tasks can be linked to a project or left on their own
+Notes can be linked to a project or kept separate
+
+Nothing is preloaded as an example. Create only what you need
+
+## Data
+
+Nexus does not require an account
+
+Projects, tasks and notes are stored in local browser storage on this device. They do not sync to another browser or device
+
+Use **Settings → Export workspace** to download a JSON backup. **Clear workspace** removes the saved projects, tasks and notes from this browser
 
 ## Keyboard shortcuts
 
 | Key | Action |
 | --- | --- |
-| 1 | Home |
+| 1 | Focus |
 | 2 | Projects |
 | 3 | Tasks |
 | 4 | Notes |
@@ -48,11 +63,9 @@ Resetting browser site data can erase the local copy, so export a backup first
 
 The app is plain HTML, CSS and JavaScript with no build step
 
-- `index.html` — page structure
-- `styles.css` — layout and visual design
-- `app.js` — workspace data and interactions
-- `assets/nexus-symbol.svg` — the geometric Nexus mark
+- `index.html` — page structure and persistent controls
+- `styles.css` — layout, transitions and responsive styling
+- `app.js` — workspace data, timer and ambient audio
+- `assets/nexus-symbol.svg` — geometric Nexus mark
 
-Run `npm run check` to check JavaScript syntax and key app features
-
-The GitHub Pages workflow publishes the root files directly
+Run `npm run check` to check JavaScript syntax and core features
