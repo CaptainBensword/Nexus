@@ -1,50 +1,58 @@
-# Nexus — Command Deck
+# Nexus
 
-Nexus is a personal workspace for keeping projects, tasks, notes and focus time in one place
+Nexus is a personal project workspace
 
-It is a browser-first tool with no account setup and no server required
+It keeps four things together
 
-## Open it
+- **Projects** — the larger things you are making
+- **Tasks** — the next actions for each project
+- **Notes** — decisions, ideas and details worth keeping
+- **Focus** — a small timer for quiet work sessions
+
+## Open Nexus
 
 https://captainbensword.github.io/Nexus/
 
-The workspace starts with example projects, a short task list and one sample note so the screens are not empty
+A short first-run tour explains how the parts fit together
 
-## What works
+## How to use it
 
-- Project cards with create and edit flows
-- Task list with completion, quick-add and cleanup
-- Notes with create and edit flows
-- Focus timer with 15, 25 and 45 minute sessions
-- Overview with project, task and note counts
-- Recent activity feed
-- Keyboard shortcuts for the main sections
-- Workspace export as JSON
-- Local browser storage so your changes remain after refresh
-- Responsive layout for desktop and mobile
+1. Create a project and give it a name and a short description
+2. Open the project and add tasks that belong to it
+3. Add notes to keep useful details beside the project
+4. Use the Home page to see your projects, next steps and recent notes
+
+The top **Add new** button lets you create a project, task or note from anywhere
+
+## Data and privacy
+
+Nexus is local-first and does not require an account
+
+Your workspace is saved in this browser on this device
+It does not sync between devices or share your information with other people
+
+Use **Workspace → Export workspace** to save a JSON backup
+Resetting browser site data can erase the local copy, so export a backup first
 
 ## Keyboard shortcuts
 
 | Key | Action |
 | --- | --- |
-| 1 | Overview |
+| 1 | Home |
 | 2 | Projects |
 | 3 | Tasks |
 | 4 | Notes |
-| Ctrl + K | Search |
-
-## Your data
-
-Nexus stores the workspace in local browser storage on the device you use
-
-It does not currently sync between devices or share data with other people
-
-Use **Export workspace** in Library to save a JSON copy before clearing browser data
+| Ctrl + K or ⌘ K | Search |
 
 ## Development
 
-The static app is in `index.html`, `styles.css` and `app.js`
+The app is plain HTML, CSS and JavaScript with no build step
 
-The `public/` folder mirrors those files for the existing hosting setup
+- `index.html` — page structure
+- `styles.css` — layout and visual design
+- `app.js` — workspace data and interactions
+- `assets/nexus-symbol.svg` — the geometric Nexus mark
 
-Run the existing repository check workflow after changes and keep the two copies in sync
+Run `npm run check` to check JavaScript syntax and key app features
+
+The GitHub Pages workflow publishes the root files directly
