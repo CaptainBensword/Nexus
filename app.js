@@ -7,9 +7,12 @@ const STORAGE_KEY="nexus-workspace-v3";
 const LEGACY_KEYS=["nexus-workspace-v2","nexus-deck-v1"];
 const AMBIENCE_KEY="nexus-ambience-v1";
 const EMPTY_DATA={projects:[],tasks:[],notes:[]};
-const SAMPLE_PROJECT_IDS=new Set(["project-talon","project-crimson","project-horizon"]);
-const SAMPLE_TASK_IDS=new Set(["task-1","task-2","task-3"]);
-const SAMPLE_NOTE_IDS=new Set(["note-1"]);
+const SAMPLE_PROJECT_IDS=new Set(["project-talon","project-crimson","project-horizon","p1","p2","p3"]);
+const SAMPLE_PROJECT_NAMES=new Set(["talon studio","crimson client","horizon"]);
+const SAMPLE_TASK_IDS=new Set(["task-1","task-2","task-3","t1","t2","t3"]);
+const SAMPLE_TASK_TITLES=new Set(["sketch the next nexus screen","organize current project files","write down the next feature idea","choose the next feature to build","review the main client screen","collect the next chapter notes"]);
+const SAMPLE_NOTE_IDS=new Set(["note-1","n1"]);
+const SAMPLE_NOTE_TITLES=new Set(["a place for ideas","workspace idea"]);
 
 let data=loadData();
 let currentView="home";
@@ -32,7 +35,7 @@ function safeParse(value){try{return JSON.parse(value);}catch(error){return null
 function cleanWorkspace(raw){
   const removedProjects=new Set();
   const projects=(Array.isArray(raw.projects)?raw.projects:[]).filter(project=>{
-    if(SAMPLE_PROJECT_IDS.has(project.id)) {removedProjects.add(project.id);return false;}
+    if(SAMPLE_PROJECT_IDS.has(project.id)||SAMPLE_PROJECT_NAMES.has(String(project.name||"").toLowerCase())) {removedProjects.add(project.id);return false;}
     return true;
   }).map(project=>({
     id:project.id||makeId("project"),
@@ -42,14 +45,14 @@ function cleanWorkspace(raw){
     status:String(project.status||"Planning"),
     created:Number(project.created)||Date.now()
   }));
-  const tasks=(Array.isArray(raw.tasks)?raw.tasks:[]).filter(task=>!SAMPLE_TASK_IDS.has(task.id)).map(task=>({
+  const tasks=(Array.isArray(raw.tasks)?raw.tasks:[]).filter(task=>!SAMPLE_TASK_IDS.has(task.id)&&!SAMPLE_TASK_TITLES.has(String(task.title||task.text||"").toLowerCase())).map(task=>({
     id:task.id||makeId("task"),
     title:String(task.title||task.text||"Untitled task"),
     projectId:removedProjects.has(task.projectId)?null:(task.projectId||null),
     done:!!task.done,
     created:Number(task.created)||Date.now()
   }));
-  const notes=(Array.isArray(raw.notes)?raw.notes:[]).filter(note=>!SAMPLE_NOTE_IDS.has(note.id)).map(note=>({
+  const notes=(Array.isArray(raw.notes)?raw.notes:[]).filter(note=>!SAMPLE_NOTE_IDS.has(note.id)&&!SAMPLE_NOTE_TITLES.has(String(note.title||"").toLowerCase())).map(note=>({
     id:note.id||makeId("note"),
     title:String(note.title||"Untitled note"),
     body:String(note.body||""),
