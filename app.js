@@ -3,16 +3,9 @@
 
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
-const STORAGE_KEY="nexus-workspace-v3";
-const LEGACY_KEYS=["nexus-workspace-v2","nexus-deck-v1"];
+const STORAGE_KEY="nexus-workspace-v4";
 const AMBIENCE_KEY="nexus-ambience-v1";
 const EMPTY_DATA={projects:[],tasks:[],notes:[]};
-const SAMPLE_PROJECT_IDS=new Set(["project-talon","project-crimson","project-horizon","p1","p2","p3"]);
-const SAMPLE_PROJECT_NAMES=new Set(["talon studio","crimson client","horizon"]);
-const SAMPLE_TASK_IDS=new Set(["task-1","task-2","task-3","t1","t2","t3"]);
-const SAMPLE_TASK_TITLES=new Set(["sketch the next nexus screen","organize current project files","write down the next feature idea","choose the next feature to build","review the main client screen","collect the next chapter notes"]);
-const SAMPLE_NOTE_IDS=new Set(["note-1","n1"]);
-const SAMPLE_NOTE_TITLES=new Set(["a place for ideas","workspace idea"]);
 
 let data=loadData();
 let currentView="home";
@@ -24,7 +17,7 @@ let searchQuery="";
 let focusTaskId=null;
 let focusTimer={duration:25*60,seconds:25*60,running:false,interval:null,taskId:""};
 let ambiencePrefs=loadAmbiencePrefs();
-let audio={context:null,master:null,noiseGain:null,highpass:null,lowpass:null,noiseSource:null,crackleGain:null,crackleSource:null,crackleFilter:null,lfo:null,lfoDepth:null,crackleInterval:null,playing:false};
+let audio={context:null,master:null,noiseGain:null,highpass:null,lowpass:null,noiseSource:null,brownGain:null,brownFilter:null,brownSource:null,crackleGain:null,crackleSource:null,crackleFilter:null,lfo:null,lfoDepth:null,crackleInterval:null,rainInterval:null,playing:false};
 
 function makeId(prefix){
   const random=window.crypto&&window.crypto.randomUUID?window.crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,8);
@@ -32,45 +25,14 @@ function makeId(prefix){
 }
 function clone(value){return JSON.parse(JSON.stringify(value));}
 function safeParse(value){try{return JSON.parse(value);}catch(error){return null;}}
-function cleanWorkspace(raw){
-  const removedProjects=new Set();
-  const projects=(Array.isArray(raw.projects)?raw.projects:[]).filter(project=>{
-    if(SAMPLE_PROJECT_IDS.has(project.id)||SAMPLE_PROJECT_NAMES.has(String(project.name||"").toLowerCase())) {removedProjects.add(project.id);return false;}
-    return true;
-  }).map(project=>({
-    id:project.id||makeId("project"),
-    name:String(project.name||"Untitled project"),
-    description:String(project.description||project.desc||""),
-    symbol:String(project.symbol||String(project.name||"P").slice(0,1).toUpperCase()),
-    status:String(project.status||"Planning"),
-    created:Number(project.created)||Date.now()
-  }));
-  const tasks=(Array.isArray(raw.tasks)?raw.tasks:[]).filter(task=>!SAMPLE_TASK_IDS.has(task.id)&&!SAMPLE_TASK_TITLES.has(String(task.title||task.text||"").toLowerCase())).map(task=>({
-    id:task.id||makeId("task"),
-    title:String(task.title||task.text||"Untitled task"),
-    projectId:removedProjects.has(task.projectId)?null:(task.projectId||null),
-    done:!!task.done,
-    created:Number(task.created)||Date.now()
-  }));
-  const notes=(Array.isArray(raw.notes)?raw.notes:[]).filter(note=>!SAMPLE_NOTE_IDS.has(note.id)&&!SAMPLE_NOTE_TITLES.has(String(note.title||"").toLowerCase())).map(note=>({
-    id:note.id||makeId("note"),
-    title:String(note.title||"Untitled note"),
-    body:String(note.body||""),
-    projectId:removedProjects.has(note.projectId)?null:(note.projectId||null),
-    updated:Number(note.updated)||Date.now()
-  }));
-  return {projects,tasks,notes};
-}
 function loadData(){
-  const current=safeParse(localStorage.getItem(STORAGE_KEY)||"");
-  if(current&&Array.isArray(current.projects)&&Array.isArray(current.tasks)&&Array.isArray(current.notes))return cleanWorkspace(current);
-  for(const key of LEGACY_KEYS){
-    const previous=safeParse(localStorage.getItem(key)||"");
-    if(previous&&Array.isArray(previous.projects)&&Array.isArray(previous.tasks)&&Array.isArray(previous.notes)){
-      const migrated=cleanWorkspace(previous);
-      try{localStorage.setItem(STORAGE_KEY,JSON.stringify(migrated));}catch(error){}
-      return migrated;
-    }
+  const saved=safeParse(localStorage.getItem(STORAGE_KEY)||"");
+  if(saved&&Array.isArray(saved.projects)&&Array.isArray(saved.tasks)&&Array.isArray(saved.notes)){
+    return {
+      projects:saved.projects,
+      tasks:saved.tasks,
+      notes:saved.notes
+    };
   }
   return clone(EMPTY_DATA);
 }
@@ -221,13 +183,17 @@ function syncAmbienceUI(){
   if(play)play.textContent=audio.playing?"Pause":"Play";
   if(volume&&Number(volume.value)!==ambiencePrefs.volume)volume.value=String(ambiencePrefs.volume);
   if(volumeValue)volumeValue.textContent=ambiencePrefs.volume+"%";
-  $$(".scene-button").forEach(button=>button.classList.toggle("active",button.dataset.scene===ambiencePrefs.scene));
+  $$(".scene-button").forEach(item=>item.classList.toggle("active",item.dataset.scene===ambiencePrefs.scene));
   const homeName=$("#homeAmbientName");
   const homeStatus=$("#homeAmbientStatus");
   const homeCard=$("#homeAmbientCard");
   if(homeName)homeName.textContent=sceneLabel(ambiencePrefs.scene);
   if(homeStatus)homeStatus.textContent=audio.playing?"PLAYING":"OFF";
   if(homeCard)homeCard.classList.toggle("is-playing",audio.playing);
+  const landingLabel=$("#landingSoundLabel");
+  const landingButton=$("#landingSoundToggle");
+  if(landingLabel)landingLabel.textContent=audio.playing?"Sound on":"Sound off";
+  if(landingButton)landingButton.classList.toggle("is-playing",audio.playing);
 }
 function setAmbiencePanel(open){
   const panel=$("#ambiencePanel");
@@ -240,46 +206,73 @@ function toggleAmbiencePanel(){
   const panel=$("#ambiencePanel");
   setAmbiencePanel(!!panel&&panel.hidden);
 }
-function createNoiseBuffer(context){
-  const length=context.sampleRate*3;
+function createNoiseBuffer(context,type){
+  const length=context.sampleRate*4;
   const buffer=context.createBuffer(1,length,context.sampleRate);
   const channel=buffer.getChannelData(0);
-  for(let i=0;i<length;i++)channel[i]=Math.random()*2-1;
+  if(type==="brown"){
+    let last=0;
+    for(let i=0;i<length;i++){
+      const white=Math.random()*2-1;
+      last=(last+.018*white)/1.018;
+      channel[i]=last*3.4;
+    }
+  }else{
+    for(let i=0;i<length;i++)channel[i]=Math.random()*2-1;
+  }
   return buffer;
 }
 function createAudioGraph(){
   const AudioContextClass=window.AudioContext||window.webkitAudioContext;
-  if(!AudioContextClass)throw new Error("Web Audio is not available in this browser");
+  if(!AudioContextClass)throw new Error("This browser does not support generated audio");
   const context=new AudioContextClass();
   const master=context.createGain();
   master.gain.value=0;
   master.connect(context.destination);
-  const source=context.createBufferSource();
-  source.buffer=createNoiseBuffer(context);
-  source.loop=true;
+
+  const whiteBuffer=createNoiseBuffer(context,"white");
+  const brownBuffer=createNoiseBuffer(context,"brown");
+
+  const rainSource=context.createBufferSource();
+  rainSource.buffer=whiteBuffer;
+  rainSource.loop=true;
   const highpass=context.createBiquadFilter();
   highpass.type="highpass";
-  highpass.frequency.value=120;
-  highpass.Q.value=.55;
+  highpass.frequency.value=260;
+  highpass.Q.value=.45;
   const lowpass=context.createBiquadFilter();
   lowpass.type="lowpass";
-  lowpass.frequency.value=1800;
-  lowpass.Q.value=.35;
+  lowpass.frequency.value=3600;
+  lowpass.Q.value=.45;
   const noiseGain=context.createGain();
-  noiseGain.gain.value=.22;
-  source.connect(highpass);
+  noiseGain.gain.value=.2;
+  rainSource.connect(highpass);
   highpass.connect(lowpass);
   lowpass.connect(noiseGain);
   noiseGain.connect(master);
-  source.start();
+  rainSource.start();
+
+  const brownSource=context.createBufferSource();
+  brownSource.buffer=brownBuffer;
+  brownSource.loop=true;
+  const brownFilter=context.createBiquadFilter();
+  brownFilter.type="lowpass";
+  brownFilter.frequency.value=700;
+  brownFilter.Q.value=.5;
+  const brownGain=context.createGain();
+  brownGain.gain.value=.02;
+  brownSource.connect(brownFilter);
+  brownFilter.connect(brownGain);
+  brownGain.connect(master);
+  brownSource.start();
 
   const crackleSource=context.createBufferSource();
-  crackleSource.buffer=source.buffer;
+  crackleSource.buffer=whiteBuffer;
   crackleSource.loop=true;
   const crackleFilter=context.createBiquadFilter();
   crackleFilter.type="bandpass";
-  crackleFilter.frequency.value=1450;
-  crackleFilter.Q.value=.7;
+  crackleFilter.frequency.value=1600;
+  crackleFilter.Q.value=.65;
   const crackleGain=context.createGain();
   crackleGain.gain.value=0;
   crackleSource.connect(crackleFilter);
@@ -293,7 +286,7 @@ function createAudioGraph(){
   const lfoDepth=context.createGain();
   lfoDepth.gain.value=0;
   lfo.connect(lfoDepth);
-  lfoDepth.connect(noiseGain.gain);
+  lfoDepth.connect(brownGain.gain);
   lfo.start();
 
   audio.context=context;
@@ -301,7 +294,10 @@ function createAudioGraph(){
   audio.noiseGain=noiseGain;
   audio.highpass=highpass;
   audio.lowpass=lowpass;
-  audio.noiseSource=source;
+  audio.noiseSource=rainSource;
+  audio.brownGain=brownGain;
+  audio.brownFilter=brownFilter;
+  audio.brownSource=brownSource;
   audio.crackleGain=crackleGain;
   audio.crackleSource=crackleSource;
   audio.crackleFilter=crackleFilter;
@@ -313,21 +309,25 @@ function configureScene(){
   if(!audio.context)return;
   const now=audio.context.currentTime;
   const settings={
-    rain:{high:170,low:2200,gain:.2,modulation:0},
-    brown:{high:28,low:260,gain:.38,modulation:0},
-    wind:{high:55,low:760,gain:.26,modulation:.09},
-    fire:{high:85,low:1050,gain:.19,modulation:0}
+    rain:{high:240,low:3800,white:.2,brown:.025,brownLow:650,modulation:0},
+    brown:{high:20,low:260,white:0,brown:.42,brownLow:280,modulation:0},
+    wind:{high:35,low:900,white:.012,brown:.28,brownLow:900,modulation:.11},
+    fire:{high:45,low:1050,white:.025,brown:.19,brownLow:780,modulation:.025}
   }[ambiencePrefs.scene];
   audio.highpass.frequency.setTargetAtTime(settings.high,now,.35);
-  audio.lowpass.frequency.setTargetAtTime(settings.low,now,.45);
-  audio.noiseGain.gain.setTargetAtTime(settings.gain,now,.35);
-  audio.lfoDepth.gain.setTargetAtTime(settings.modulation,now,.5);
+  audio.lowpass.frequency.setTargetAtTime(settings.low,now,.4);
+  audio.noiseGain.gain.setTargetAtTime(settings.white,now,.35);
+  audio.brownFilter.frequency.setTargetAtTime(settings.brownLow,now,.45);
+  audio.brownGain.gain.setTargetAtTime(settings.brown,now,.45);
+  audio.lfoDepth.gain.setTargetAtTime(settings.modulation,now,.6);
+  stopCrackles();
+  stopRainDrops();
   if(ambiencePrefs.scene==="fire"){
-    audio.crackleFilter.frequency.setTargetAtTime(1550,now,.4);
+    audio.crackleFilter.frequency.setTargetAtTime(1750,now,.4);
     startCrackles();
   }else{
-    stopCrackles();
-    audio.crackleGain.gain.setTargetAtTime(0,now,.15);
+    audio.crackleGain.gain.setTargetAtTime(.0001,now,.1);
+    if(ambiencePrefs.scene==="rain")startRainDrops();
   }
 }
 function startCrackles(){
@@ -335,16 +335,39 @@ function startCrackles(){
   audio.crackleInterval=setInterval(()=>{
     if(!audio.playing||ambiencePrefs.scene!=="fire"||!audio.context)return;
     const now=audio.context.currentTime;
-    const peak=.018+Math.random()*.035;
-    const end=now+.035+Math.random()*.075;
+    const peak=.025+Math.random()*.045;
+    const end=now+.025+Math.random()*.08;
     audio.crackleGain.gain.cancelScheduledValues(now);
     audio.crackleGain.gain.setValueAtTime(.0001,now);
-    audio.crackleGain.gain.linearRampToValueAtTime(peak,now+.008);
+    audio.crackleGain.gain.linearRampToValueAtTime(peak,now+.006);
     audio.crackleGain.gain.exponentialRampToValueAtTime(.0001,end);
-  },190+Math.random()*160);
+  },150+Math.random()*240);
 }
 function stopCrackles(){
   if(audio.crackleInterval){clearInterval(audio.crackleInterval);audio.crackleInterval=null;}
+}
+function startRainDrops(){
+  if(audio.rainInterval||!audio.context)return;
+  audio.rainInterval=setInterval(()=>{
+    if(!audio.playing||ambiencePrefs.scene!=="rain"||!audio.context)return;
+    const context=audio.context;
+    const oscillator=context.createOscillator();
+    const envelope=context.createGain();
+    const now=context.currentTime;
+    oscillator.type="sine";
+    oscillator.frequency.setValueAtTime(850+Math.random()*1500,now);
+    oscillator.frequency.exponentialRampToValueAtTime(450+Math.random()*600,now+.065);
+    envelope.gain.setValueAtTime(.0001,now);
+    envelope.gain.linearRampToValueAtTime(.012+Math.random()*.012,now+.008);
+    envelope.gain.exponentialRampToValueAtTime(.0001,now+.075);
+    oscillator.connect(envelope);
+    envelope.connect(audio.master);
+    oscillator.start(now);
+    oscillator.stop(now+.08);
+  },105+Math.random()*150);
+}
+function stopRainDrops(){
+  if(audio.rainInterval){clearInterval(audio.rainInterval);audio.rainInterval=null;}
 }
 async function toggleAmbience(){
   try{
@@ -361,7 +384,7 @@ async function toggleAmbience(){
       audio.playing=true;
       configureScene();
       audio.master.gain.cancelScheduledValues(audio.context.currentTime);
-      audio.master.gain.setTargetAtTime((ambiencePrefs.volume/100)*.55,audio.context.currentTime,.7);
+      audio.master.gain.setTargetAtTime((ambiencePrefs.volume/100)*.8,audio.context.currentTime,.7);
       syncAmbienceUI();
     }
   }catch(error){
@@ -381,7 +404,7 @@ function changeVolume(value){
   ambiencePrefs.volume=Math.max(0,Math.min(100,Number(value)||0));
   saveAmbiencePrefs();
   if(audio.context&&audio.master&&audio.playing){
-    audio.master.gain.setTargetAtTime((ambiencePrefs.volume/100)*.55,audio.context.currentTime,.12);
+    audio.master.gain.setTargetAtTime((ambiencePrefs.volume/100)*.8,audio.context.currentTime,.12);
   }
   syncAmbienceUI();
 }
