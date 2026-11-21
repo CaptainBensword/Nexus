@@ -390,8 +390,11 @@ async function toggleAmbience(){
     }
   }catch(error){
     audio.playing=false;
+    stopCrackles();
+    stopRainDrops();
+    if(audio.master&&audio.context)audio.master.gain.setTargetAtTime(0,audio.context.currentTime,.08);
     syncAmbienceUI();
-    toast("Ambient audio could not start in this browser");
+    toast("Sound could not start — check that this tab is not muted");
   }
 }
 function changeScene(scene){
