@@ -1,8 +1,8 @@
 {
-  "name": "nexus-workspace",
+  "name": "nexus-focus-workspace",
   "version": "1.0.0",
   "private": true,
-  "description": "A local-first workspace for projects, tasks and notes",
+  "description": "A local-first focus workspace with ambient sound, timer, projects and notes",
   "scripts": {
     "check": "node --check app.js && node scripts/check.js"
   }
