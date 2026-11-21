@@ -13,7 +13,48 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app-frame">
+  <div class="landing-page" id="landingPage">
+    <div class="landing-backdrop" aria-hidden="true">
+      <div class="landing-glow landing-glow-one"></div>
+      <div class="landing-glow landing-glow-two"></div>
+      <div class="landing-grid"></div>
+      <div class="sound-orbit orbit-one"></div>
+      <div class="sound-orbit orbit-two"></div>
+      <div class="sound-orbit orbit-three"></div>
+      <div class="landing-core"><div class="core-inner"></div><div class="core-wave wave-one"></div><div class="core-wave wave-two"></div></div>
+    </div>
+    <header class="landing-nav">
+      <a class="landing-brand" href="#" aria-label="Nexus home"><img src="assets/nexus-symbol.svg" alt=""><span>NEXUS</span></a>
+      <div class="landing-nav-right">
+        <span class="landing-edition">FOCUS WORKSPACE</span>
+        <button class="landing-sound" id="landingSoundToggle" type="button"><span class="landing-sound-dot"></span><span id="landingSoundLabel">Sound off</span></button>
+      </div>
+    </header>
+    <main class="landing-main">
+      <div class="landing-copy">
+        <div class="landing-kicker"><span></span> A LITTLE SPACE TO THINK</div>
+        <h1>Find your<br><em>focus</em></h1>
+        <p class="landing-description">A quiet workspace with a focus timer, ambient sound, and room for the things you are working on</p>
+        <div class="landing-actions">
+          <button class="landing-enter" id="enterWorkspace" type="button">Enter Nexus <span>↗</span></button>
+          <div class="landing-hint"><span class="hint-key">10 / 25 / 45</span><span>MINUTE SESSIONS</span></div>
+        </div>
+      </div>
+      <div class="landing-visual" aria-hidden="true">
+        <div class="visual-ring ring-a"></div><div class="visual-ring ring-b"></div><div class="visual-ring ring-c"></div>
+        <div class="visual-center"><span class="visual-center-dot"></span></div>
+        <div class="visual-line line-a"></div><div class="visual-line line-b"></div>
+        <div class="visual-label label-a">FOCUS</div><div class="visual-label label-b">AMBIENCE</div>
+        <div class="visual-bars"><i style="--i:0"></i><i style="--i:1"></i><i style="--i:2"></i><i style="--i:3"></i><i style="--i:4"></i><i style="--i:5"></i><i style="--i:6"></i><i style="--i:7"></i><i style="--i:8"></i><i style="--i:9"></i><i style="--i:10"></i><i style="--i:11"></i><i style="--i:12"></i><i style="--i:13"></i><i style="--i:14"></i><i style="--i:15"></i><i style="--i:16"></i><i style="--i:17"></i><i style="--i:18"></i><i style="--i:19"></i><i style="--i:20"></i><i style="--i:21"></i><i style="--i:22"></i><i style="--i:23"></i><i style="--i:24"></i><i style="--i:25"></i><i style="--i:26"></i><i style="--i:27"></i><i style="--i:28"></i><i style="--i:29"></i><i style="--i:30"></i></div>
+      </div>
+    </main>
+    <footer class="landing-footer">
+      <span>YOUR TIME, ON YOUR TERMS</span>
+      <span><i></i> SOUND IS OPTIONAL</span>
+      <span>NO ACCOUNT REQUIRED</span>
+    </footer>
+  </div>
+  <div class="app-frame" id="workspaceApp" hidden>
     <aside class="sidebar">
       <a class="brand" href="#" aria-label="Nexus focus" data-view="home">
         <img src="assets/nexus-symbol.svg" alt="" class="brand-symbol">
