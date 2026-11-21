@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  syntax:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -16,7 +16,5 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-      - name: Check server and browser JavaScript
+      - name: Check browser JavaScript
         run: npm run check
