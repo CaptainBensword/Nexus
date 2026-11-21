@@ -83,6 +83,7 @@ function projectProgress(projectId){
 function setView(view){
   currentView=view;
   activeProjectId=null;
+  focusTaskId=null;
   render();
 }
 function pageHeading(kicker,title,description,actions){
