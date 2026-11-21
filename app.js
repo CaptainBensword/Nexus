@@ -375,6 +375,7 @@ async function toggleAmbience(){
     if(audio.playing){
       audio.playing=false;
       stopCrackles();
+      stopRainDrops();
       const context=audio.context;
       audio.master.gain.setTargetAtTime(0,context.currentTime,.16);
       syncAmbienceUI();
