@@ -24,12 +24,13 @@ let data=loadData();
 let currentView="home";
 let activeProjectId=null;
 let taskFilter="all";
+let focusTaskId=null;
 let modalType="";
 let editingId=null;
 let searchQuery="";
 let tourStep=0;
 let focusTimer={seconds:25*60,duration:25*60,running:false,interval:null};
-function id(prefix){return prefix+"-"+(crypto&&crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,8));}
+function id(prefix){const random=window.crypto&&window.crypto.randomUUID?window.crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,8);return prefix+"-"+random;}
 function clone(value){return JSON.parse(JSON.stringify(value));}
 function loadData(){
   try{
@@ -90,11 +91,11 @@ function pageHeading(kicker,title,description,actions){
 function projectCard(project){
   const open=projectTaskCount(project.id);
   const progress=projectProgress(project.id);
-  return '<article class="project-card"><div class="project-topline"><span class="project-glyph">'+escapeHTML(project.symbol||uidLabel(project.name))+'</span><span class="project-state">'+escapeHTML(project.status)+'</span></div><h3>'+escapeHTML(project.name)+'</h3><p>'+escapeHTML(project.description||"No description yet")+'</p><div class="progress-track"><div class="progress-fill" style="width:'+progress+'%"></div></div><div class="project-card-footer"><span>'+open+' OPEN TASK'+(open===1?"":"S")+'</span><button class="text-button" data-project-open="'+escapeHTML(project.id)+'">OPEN PROJECT ↗</button></div></article>';
+  return '<button class="project-card" data-project-open="'+escapeHTML(project.id)+'"><div class="project-topline"><span class="project-glyph">'+escapeHTML(project.symbol||uidLabel(project.name))+'</span><span class="project-state">'+escapeHTML(project.status)+'</span></div><h3>'+escapeHTML(project.name)+'</h3><p>'+escapeHTML(project.description||"No description yet")+'</p><div class="progress-track"><div class="progress-fill" style="width:'+progress+'%"></div></div><div class="project-card-footer"><span>'+open+' OPEN TASK'+(open===1?"":"S")+'</span><span>OPEN PROJECT ↗</span></div></button>';
 }
 function taskRow(task){
   const project=projectById(task.projectId);
-  return '<div class="task-row"><button class="task-check '+(task.done?"done":"")+'" data-task-toggle="'+escapeHTML(task.id)+'" aria-label="'+(task.done?"Mark task open":"Complete task")+'">'+(task.done?"✓":"")+'</button><span class="task-text '+(task.done?"done":"")+'">'+escapeHTML(task.title)+'</span>'+(project?'<span class="task-project">'+escapeHTML(project.name)+'</span>':'')+'<button class="task-delete" data-task-delete="'+escapeHTML(task.id)+'" aria-label="Delete task">×</button></div>';
+  return '<div class="task-row '+(task.id===focusTaskId?"task-highlight":"")+'"><button class="task-check '+(task.done?"done":"")+'" data-task-toggle="'+escapeHTML(task.id)+'" aria-label="'+(task.done?"Mark task open":"Complete task")+'">'+(task.done?"✓":"")+'</button><span class="task-text '+(task.done?"done":"")+'">'+escapeHTML(task.title)+'</span>'+(project?'<span class="task-project">'+escapeHTML(project.name)+'</span>':'')+'<button class="task-delete" data-task-delete="'+escapeHTML(task.id)+'" aria-label="Delete task">×</button></div>';
 }
 function notePreview(note){
   const project=projectById(note.projectId);
@@ -342,8 +343,8 @@ function resetTimer(){
 function openSearchResult(kind,itemId){
   closeModal();
   if(kind==="PROJECT"){activeProjectId=itemId;currentView="projects";render();return;}
-  if(kind==="TASK"){currentView="tasks";taskFilter="all";render();return;}
-  if(kind==="NOTE"){currentView="notes";render();return;}
+  if(kind==="TASK"){currentView="tasks";activeProjectId=null;taskFilter="all";focusTaskId=itemId;render();return;}
+  if(kind==="NOTE"){openModal("note",{id:itemId});return;}
 }
 function handleClick(event){
   const target=event.target;
@@ -355,7 +356,7 @@ function handleClick(event){
     openModal(open.dataset.open,options);
     return;
   }
-  if(target.closest("[data-close]")){closeModal();return;}
+  if(target.closest("[data-close]")){if(modalType==="tour")completeTour();else closeModal();return;}
   if(target.closest("[data-choice]")){
     const choice=target.closest("[data-choice]").dataset.choice;
     closeModal();openModal(choice);return;
@@ -375,13 +376,13 @@ function handleClick(event){
   const projectDelete=target.closest("[data-project-delete]");
   if(projectDelete){deleteProject(projectDelete.dataset.projectDelete);return;}
   const taskToggle=target.closest("[data-task-toggle]");
-  if(taskToggle){toggleTask(taskToggle.dataset.taskToggle);return;}
+  if(taskToggle){focusTaskId=null;toggleTask(taskToggle.dataset.taskToggle);return;}
   const taskDeleteButton=target.closest("[data-task-delete]");
-  if(taskDeleteButton){deleteTask(taskDeleteButton.dataset.taskDelete);return;}
+  if(taskDeleteButton){focusTaskId=null;deleteTask(taskDeleteButton.dataset.taskDelete);return;}
   const noteEdit=target.closest("[data-note-edit]");
   if(noteEdit){openModal("note",{id:noteEdit.dataset.noteEdit});return;}
   const filter=target.closest("[data-task-filter]");
-  if(filter){taskFilter=filter.dataset.taskFilter;render();return;}
+  if(filter){taskFilter=filter.dataset.taskFilter;focusTaskId=null;render();return;}
   const duration=target.closest("[data-duration]");
   if(duration){clearInterval(focusTimer.interval);focusTimer.interval=null;focusTimer.running=false;focusTimer.duration=Number(duration.dataset.duration)*60;focusTimer.seconds=focusTimer.duration;render();return;}
   const searchResult=target.closest("[data-search-kind]");
