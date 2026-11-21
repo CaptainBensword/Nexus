@@ -16,10 +16,11 @@ assert.ok(html.includes('id="landingSoundToggle"'),"Welcome page sound control i
 assert.ok(html.includes('id="ambiencePanel"'),"Workspace ambient controls are missing");
 assert.ok(html.includes('id="runningTimer"'),"Persistent timer indicator is missing");
 assert.ok(html.includes('assets/nexus-symbol.svg'),"Geometric Nexus mark is missing");
-assert.ok(html.includes("app.js?v=5")&&html.includes("styles.css?v=5"),"Cache-busted asset versions are missing");
+assert.ok(html.includes("app.js?v=6")&&html.includes("styles.css?v=6"),"Cache-busted asset versions are missing");
 assert.ok(!/kit-head|kit-head\.svg|nexus-mark\.svg/i.test(html+css+app),"Old character and logo references must not be used");
 assert.ok(app.includes('const STORAGE_KEY="nexus-workspace-v4"'),"Fresh workspace storage key is missing");
 assert.ok(app.includes('const EMPTY_DATA={projects:[],tasks:[],notes:[]}'),"New workspaces must start empty");
+assert.ok(app.includes('"nexus-workspace-v3","nexus-workspace-v2","nexus-deck-v1","nexus-focus-task"'),"Old personal demo data must be cleared on upgrade");
 assert.ok(!/Talon Studio|Crimson Client|Horizon/.test(app),"No personal example names should be present");
 assert.ok(!/HOW THE PIECES FIT|PROJECTS　→　TASKS　→　NOTES/.test(app+html),"Old category diagram must be removed");
 for(const feature of [
