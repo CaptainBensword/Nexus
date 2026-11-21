@@ -623,8 +623,6 @@ $("#ambiencePanel").addEventListener("click",event=>{
   if(scene)changeScene(scene.dataset.scene);
 });
 $("#ambienceVolume").addEventListener("input",event=>changeVolume(event.target.value));
-$("#homeAmbienceButton").addEventListener("click",()=>setAmbiencePanel(true));
-$("#settingsAmbienceButton")?.addEventListener("click",()=>{setAmbiencePanel(true);});
 document.addEventListener("pointerdown",event=>{
   if(!event.target.closest(".ambience-wrap")&&!event.target.closest("#homeAmbienceButton")&&!event.target.closest("#settingsAmbienceButton"))setAmbiencePanel(false);
 });
@@ -653,6 +651,7 @@ $("#content").addEventListener("submit",event=>{
   }
 });
 $("#content").addEventListener("click",event=>{
+  if(event.target.closest("#homeAmbienceButton")||event.target.closest("#settingsAmbienceButton")){setAmbiencePanel(true);return;}
   if(event.target.closest("#timerToggle")||event.target.closest("#persistentTimerToggle"))toggleTimer();
   if(event.target.id==="timerReset")resetTimer();
   if(event.target.id==="exportData")exportWorkspace();
