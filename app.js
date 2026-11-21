@@ -610,6 +610,7 @@ function resetWorkspace(){
 function openSearch(){searchQuery="";openModal("search");}
 function handleClick(event){
   const target=event.target;
+  if(target.closest("[data-return-landing]")){returnToLanding();return;}
   const viewButton=target.closest("[data-view]");
   if(viewButton){setView(viewButton.dataset.view);return;}
   const open=target.closest("[data-open]");
@@ -640,6 +641,21 @@ function handleClick(event){
   if(searchResult){openSearchResult(searchResult.dataset.searchKind,searchResult.dataset.searchId);return;}
 }
 document.addEventListener("click",handleClick);
+function enterWorkspace(){
+  $("#landingPage").hidden=true;
+  $("#workspaceApp").hidden=false;
+  currentView="home";
+  activeProjectId=null;
+  render();
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function returnToLanding(){
+  $("#workspaceApp").hidden=true;
+  $("#landingPage").hidden=false;
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+$("#enterWorkspace").addEventListener("click",enterWorkspace);
+$("#landingSoundToggle").addEventListener("click",toggleAmbience);
 $("#addButton").addEventListener("click",()=>openModal("chooser"));
 $("#searchButton").addEventListener("click",openSearch);
 $("#ambienceButton").addEventListener("click",toggleAmbiencePanel);
