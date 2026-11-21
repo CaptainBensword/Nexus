@@ -368,7 +368,7 @@ html,body{min-height:100%;margin:0}
 .visual-label{position:absolute;color:#a88b98;font:8px var(--mono);letter-spacing:.18em}
 .label-a{top:20%;right:9%}.label-b{bottom:21%;left:8%}
 .visual-bars{position:absolute;bottom:10%;right:10%;height:44px;display:flex;align-items:center;gap:3px;opacity:.62}
-.visual-bars i{display:block;width:2px;height:calc(5px + (var(--i) % 8)*4px);border-radius:4px;background:#e25a77;transform:scaleY(.65);transform-origin:center;animation:bar-wave 1.25s calc(var(--i)*-.055s) ease-in-out infinite alternate}
+.visual-bars i{display:block;width:2px;height:var(--bar-height,14px);border-radius:4px;background:#e25a77;transform:scaleY(.65);transform-origin:center;animation:bar-wave 1.25s ease-in-out infinite alternate}
 .landing-footer{width:min(1280px,calc(100% - 72px));height:56px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #ffffff12;position:relative;z-index:1;color:#69636f;font:8px var(--mono);letter-spacing:.14em}
 .landing-footer span:nth-child(2){display:flex;align-items:center;gap:7px}
 .landing-footer i{width:5px;height:5px;border-radius:50%;background:#b94d65}
