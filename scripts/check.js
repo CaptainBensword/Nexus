@@ -8,20 +8,29 @@ const html=read("index.html");
 const css=read("styles.css");
 const app=read("app.js");
 const icon=read("assets/nexus-symbol.svg");
-assert.ok(html.includes('id="content"'),"Main content mount is missing");
-assert.ok(html.includes('id="modalLayer"'),"Modal layer is missing");
-assert.ok(html.includes('assets/nexus-symbol.svg'),"Nexus symbol is missing");
-assert.ok(!/kit-head|kit-head\.svg|nexus-mark\.svg/i.test(html+css+app),"Old character or logo must not be used");
-for(const feature of [
-  "Create a project","Next steps","Recent notes","Search your workspace",
-  "focusTimer","nexus-workspace-v2","nexus-tour-complete","Export workspace",
-  "data-project-open","data-task-toggle","data-note-edit"
-]){
-  assert.ok(app.includes(feature)||html.includes(feature),"Missing workspace feature: "+feature);
+
+assert.ok(html.includes('id="content"'),"Main page mount is missing");
+assert.ok(html.includes('id="ambiencePanel"'),"Persistent ambience controls are missing");
+assert.ok(html.includes('id="runningTimer"'),"Persistent timer indicator is missing");
+assert.ok(html.includes('assets/nexus-symbol.svg'),"Geometric Nexus mark is missing");
+assert.ok(!/kit-head|kit-head\.svg|nexus-mark\.svg/i.test(html+css+app),"Old character and logo references must not be used");
+assert.ok(!/Talon Studio|Crimson Client|Horizon/.test(html+app),"There must be no pre-made sample projects");
+assert.ok(app.includes('const EMPTY_DATA={projects:[],tasks:[],notes:[]}'),"New workspaces must start empty");
+assert.ok(app.includes('nexus-workspace-v3'),"Fresh workspace storage key is missing");
+assert.ok(app.includes('new AudioContextClass()'),"Generated ambient audio is missing");
+for(const scene of ['rain','brown','wind','fire']){
+  assert.ok(app.includes('scene==="'+scene+'"')||app.includes(scene+':{'),"Missing ambient scene: "+scene);
 }
-assert.ok(css.includes(".home-intro"),"Home layout styles are missing");
-assert.ok(css.includes("@media(max-width:760px)"),"Mobile layout is missing");
+for(const feature of [
+  "function renderTimer()","function renderProjects()","function renderTasks()",
+  "function renderNotes()","function toggleAmbience()","function changeVolume(",
+  "function exportWorkspace()","data-project-open","data-task-toggle","data-note-edit"
+]){
+  assert.ok(app.includes(feature),"Missing workspace feature: "+feature);
+}
+assert.ok(css.includes(".focus-main"),"Focus timer layout styles are missing");
+assert.ok(css.includes(".ambience-panel"),"Ambient control styling is missing");
 assert.ok(css.includes("prefers-reduced-motion"),"Reduced motion support is missing");
+assert.ok(css.includes("@media(max-width:680px)"),"Mobile layout is missing");
 assert.ok(icon.includes("<svg")&&icon.includes("</svg>"),"Nexus symbol SVG is invalid");
-assert.ok(!html.includes("kit-head.svg"),"No Kit image references allowed");
-console.log("Nexus checks passed — workspace markup, interactions, responsive styles and assets");
+console.log("Nexus checks passed — empty workspace, timer, ambient audio, responsive layout and assets");
