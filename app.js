@@ -620,6 +620,7 @@ document.addEventListener("click",handleClick);
 $("#addButton").addEventListener("click",()=>openModal("chooser"));
 $("#searchButton").addEventListener("click",openSearch);
 $("#ambienceButton").addEventListener("click",toggleAmbiencePanel);
+$("#runningTimer").addEventListener("click",event=>{if(event.target.closest("[data-timer-toggle]"))toggleTimer();});
 $("#ambiencePlay").addEventListener("click",toggleAmbience);
 $("#ambiencePanel").addEventListener("click",event=>{
   const scene=event.target.closest("[data-scene]");
