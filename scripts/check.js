@@ -14,9 +14,9 @@ assert.ok(html.includes('id="ambiencePanel"'),"Persistent ambience controls are 
 assert.ok(html.includes('id="runningTimer"'),"Persistent timer indicator is missing");
 assert.ok(html.includes('assets/nexus-symbol.svg'),"Geometric Nexus mark is missing");
 assert.ok(!/kit-head|kit-head\.svg|nexus-mark\.svg/i.test(html+css+app),"Old character and logo references must not be used");
-assert.ok(!/Talon Studio|Crimson Client|Horizon/.test(html+app),"There must be no pre-made sample projects");
 assert.ok(app.includes('const EMPTY_DATA={projects:[],tasks:[],notes:[]}'),"New workspaces must start empty");
 assert.ok(app.includes('nexus-workspace-v3'),"Fresh workspace storage key is missing");
+assert.ok(app.includes('SAMPLE_PROJECT_NAMES')&&app.includes('SAMPLE_TASK_TITLES')&&app.includes('SAMPLE_NOTE_TITLES'),"Old sample content must be filtered during upgrade");
 assert.ok(app.includes('new AudioContextClass()'),"Generated ambient audio is missing");
 for(const scene of ['rain','brown','wind','fire']){
   assert.ok(app.includes('scene==="'+scene+'"')||app.includes(scene+':{'),"Missing ambient scene: "+scene);
