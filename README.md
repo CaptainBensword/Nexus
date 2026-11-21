@@ -42,7 +42,7 @@ Resetting browser site data can erase the local copy, so export a backup first
 | 2 | Projects |
 | 3 | Tasks |
 | 4 | Notes |
-| Ctrl + K or ⌘ K | Search |
+| Ctrl + K | Search |
 
 ## Development
 
