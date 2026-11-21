@@ -292,3 +292,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   .main-footer{justify-content:center}
 }
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+.task-add-row{display:flex;gap:7px;margin-bottom:10px}
+.task-add-row input{height:35px;flex:1;min-width:0;border:1px solid #d9d4cc;border-radius:5px;background:#fffefa;color:#27242b;padding:0 10px;font-size:9px}
+.task-add-row button{width:36px;flex:none;border:1px solid var(--red);border-radius:5px;background:var(--red);color:#fff;font-size:16px}
+.task-highlight{background:#f9e9ec;margin:0 -8px;padding-left:9px;padding-right:9px;border-radius:5px}
+@media(max-width:680px){
+  .sidebar{display:flex;flex-direction:row;align-items:center}
+  .sidebar .nav-list{display:contents}
+}
