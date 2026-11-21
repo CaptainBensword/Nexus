@@ -1,81 +1,114 @@
 (function(){
 "use strict";
+
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>Array.from(root.querySelectorAll(selector));
-const STORAGE_KEY="nexus-workspace-v2";
-const OLD_KEY="nexus-deck-v1";
-const SEED={
-  projects:[
-    {id:"project-talon",name:"Talon Studio",description:"A home for games, experiments and community projects",symbol:"T",status:"In progress",created:Date.now()-86400000*7},
-    {id:"project-crimson",name:"Crimson Client",description:"A Minecraft client with a clean interface and useful tools",symbol:"C",status:"Building",created:Date.now()-86400000*4},
-    {id:"project-horizon",name:"Horizon",description:"A story world with characters, places and history",symbol:"H",status:"Writing",created:Date.now()-86400000*2}
-  ],
-  tasks:[
-    {id:"task-1",title:"Choose the next feature to build",projectId:"project-talon",done:false,created:Date.now()-3600000},
-    {id:"task-2",title:"Review the main client screen",projectId:"project-crimson",done:false,created:Date.now()-7200000},
-    {id:"task-3",title:"Collect the next chapter notes",projectId:"project-horizon",done:true,created:Date.now()-86400000}
-  ],
-  notes:[
-    {id:"note-1",title:"Workspace idea",body:"Keep the next step small and clear\n\nUse this space for details you do not want to lose",projectId:"project-talon",updated:Date.now()-86400000}
-  ],
-  activity:[{id:"a1",text:"Nexus workspace is ready",kind:"Workspace",created:Date.now()}]
-};
+const STORAGE_KEY="nexus-workspace-v3";
+const LEGACY_KEYS=["nexus-workspace-v2","nexus-deck-v1"];
+const AMBIENCE_KEY="nexus-ambience-v1";
+const EMPTY_DATA={projects:[],tasks:[],notes:[]};
+const SAMPLE_PROJECT_IDS=new Set(["project-talon","project-crimson","project-horizon"]);
+const SAMPLE_TASK_IDS=new Set(["task-1","task-2","task-3"]);
+const SAMPLE_NOTE_IDS=new Set(["note-1"]);
+
 let data=loadData();
 let currentView="home";
 let activeProjectId=null;
 let taskFilter="all";
-let focusTaskId=null;
-let modalType="";
 let editingId=null;
+let modalType="";
 let searchQuery="";
-let tourStep=0;
-let focusTimer={seconds:25*60,duration:25*60,running:false,interval:null};
-function id(prefix){const random=window.crypto&&window.crypto.randomUUID?window.crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,8);return prefix+"-"+random;}
+let focusTaskId=null;
+let focusTimer={duration:25*60,seconds:25*60,running:false,interval:null,taskId:""};
+let ambiencePrefs=loadAmbiencePrefs();
+let audio={context:null,master:null,noiseGain:null,highpass:null,lowpass:null,noiseSource:null,crackleGain:null,crackleSource:null,crackleFilter:null,lfo:null,lfoDepth:null,crackleInterval:null,playing:false};
+
+function makeId(prefix){
+  const random=window.crypto&&window.crypto.randomUUID?window.crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  return prefix+"-"+random;
+}
 function clone(value){return JSON.parse(JSON.stringify(value));}
+function safeParse(value){try{return JSON.parse(value);}catch(error){return null;}}
+function cleanWorkspace(raw){
+  const removedProjects=new Set();
+  const projects=(Array.isArray(raw.projects)?raw.projects:[]).filter(project=>{
+    if(SAMPLE_PROJECT_IDS.has(project.id)) {removedProjects.add(project.id);return false;}
+    return true;
+  }).map(project=>({
+    id:project.id||makeId("project"),
+    name:String(project.name||"Untitled project"),
+    description:String(project.description||project.desc||""),
+    symbol:String(project.symbol||String(project.name||"P").slice(0,1).toUpperCase()),
+    status:String(project.status||"Planning"),
+    created:Number(project.created)||Date.now()
+  }));
+  const tasks=(Array.isArray(raw.tasks)?raw.tasks:[]).filter(task=>!SAMPLE_TASK_IDS.has(task.id)).map(task=>({
+    id:task.id||makeId("task"),
+    title:String(task.title||task.text||"Untitled task"),
+    projectId:removedProjects.has(task.projectId)?null:(task.projectId||null),
+    done:!!task.done,
+    created:Number(task.created)||Date.now()
+  }));
+  const notes=(Array.isArray(raw.notes)?raw.notes:[]).filter(note=>!SAMPLE_NOTE_IDS.has(note.id)).map(note=>({
+    id:note.id||makeId("note"),
+    title:String(note.title||"Untitled note"),
+    body:String(note.body||""),
+    projectId:removedProjects.has(note.projectId)?null:(note.projectId||null),
+    updated:Number(note.updated)||Date.now()
+  }));
+  return {projects,tasks,notes};
+}
 function loadData(){
-  try{
-    const saved=JSON.parse(localStorage.getItem(STORAGE_KEY)||localStorage.getItem(OLD_KEY)||"null");
-    if(saved&&Array.isArray(saved.projects)&&Array.isArray(saved.tasks)&&Array.isArray(saved.notes)){
-      return {
-        projects:saved.projects.map(p=>({id:p.id||id("project"),name:p.name||"Untitled project",description:p.description||p.desc||"",symbol:p.symbol||"N",status:p.status||"In progress",created:p.created||Date.now()})),
-        tasks:saved.tasks.map(t=>({id:t.id||id("task"),title:t.title||t.text||"Untitled task",projectId:t.projectId||null,done:!!t.done,created:t.created||Date.now()})),
-        notes:saved.notes.map(n=>({id:n.id||id("note"),title:n.title||"Untitled note",body:n.body||"",projectId:n.projectId||null,updated:n.updated||Date.now()})),
-        activity:Array.isArray(saved.activity)?saved.activity:clone(SEED.activity)
-      };
+  const current=safeParse(localStorage.getItem(STORAGE_KEY)||"");
+  if(current&&Array.isArray(current.projects)&&Array.isArray(current.tasks)&&Array.isArray(current.notes))return cleanWorkspace(current);
+  for(const key of LEGACY_KEYS){
+    const previous=safeParse(localStorage.getItem(key)||"");
+    if(previous&&Array.isArray(previous.projects)&&Array.isArray(previous.tasks)&&Array.isArray(previous.notes)){
+      const migrated=cleanWorkspace(previous);
+      try{localStorage.setItem(STORAGE_KEY,JSON.stringify(migrated));}catch(error){}
+      return migrated;
     }
-  }catch(error){}
-  return clone(SEED);
+  }
+  return clone(EMPTY_DATA);
 }
 function saveData(){
   try{
     localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
-    $("#saveStatus").innerHTML="<i></i> ALL CHANGES SAVED";
+    const status=$("#saveStatus");
+    if(status)status.innerHTML="<i></i> SAVED ON THIS DEVICE";
   }catch(error){
-    $("#saveStatus").textContent="STORAGE FULL";
-    toast("Your browser could not save this change");
+    const status=$("#saveStatus");
+    if(status)status.textContent="STORAGE FULL";
+    toast("This browser could not save the change");
   }
+}
+function loadAmbiencePrefs(){
+  const saved=safeParse(localStorage.getItem(AMBIENCE_KEY)||"");
+  const scenes=["rain","brown","wind","fire"];
+  return {
+    scene:saved&&scenes.includes(saved.scene)?saved.scene:"rain",
+    volume:saved&&Number.isFinite(Number(saved.volume))?Math.max(0,Math.min(100,Number(saved.volume))):38
+  };
+}
+function saveAmbiencePrefs(){
+  try{localStorage.setItem(AMBIENCE_KEY,JSON.stringify(ambiencePrefs));}catch(error){}
 }
 function escapeHTML(value){
   return String(value==null?"":value).replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
 }
-function uidLabel(value){return String(value||"").slice(0,1).toUpperCase()||"N";}
 function toast(message){
+  const stack=$("#toastStack");
   const node=document.createElement("div");
   node.className="toast";
   node.textContent=message;
-  $("#toastStack").append(node);
-  setTimeout(()=>node.remove(),2500);
+  stack.append(node);
+  setTimeout(()=>node.remove(),2600);
 }
-function activity(text,kind){
-  data.activity.unshift({id:id("activity"),text,kind,created:Date.now()});
-  data.activity=data.activity.slice(0,12);
-  saveData();
-}
-function formatDate(value,options){
-  return new Date(value||Date.now()).toLocaleDateString(undefined,options||{month:"short",day:"numeric"});
+function formatDate(value){
+  return new Date(value||Date.now()).toLocaleDateString(undefined,{month:"short",day:"numeric"});
 }
 function projectById(projectId){return data.projects.find(project=>project.id===projectId)||null;}
-function projectTaskCount(projectId){return data.tasks.filter(task=>task.projectId===projectId&&!task.done).length;}
+function openTaskCount(projectId){return data.tasks.filter(task=>task.projectId===projectId&&!task.done).length;}
 function projectProgress(projectId){
   const tasks=data.tasks.filter(task=>task.projectId===projectId);
   return tasks.length?Math.round(tasks.filter(task=>task.done).length/tasks.length*100):0;
@@ -89,35 +122,46 @@ function setView(view){
 function pageHeading(kicker,title,description,actions){
   return '<div class="page-heading"><div><div class="page-kicker">'+escapeHTML(kicker)+'</div><h1>'+escapeHTML(title)+'</h1><p>'+escapeHTML(description)+'</p></div>'+(actions?'<div class="page-actions">'+actions+'</div>':"")+'</div>';
 }
+function emptyState(title,description,action){
+  return '<div class="empty-state"><strong>'+escapeHTML(title)+'</strong>'+escapeHTML(description)+(action||"")+'</div>';
+}
 function projectCard(project){
-  const open=projectTaskCount(project.id);
+  const open=openTaskCount(project.id);
   const progress=projectProgress(project.id);
-  return '<button class="project-card" data-project-open="'+escapeHTML(project.id)+'"><div class="project-topline"><span class="project-glyph">'+escapeHTML(project.symbol||uidLabel(project.name))+'</span><span class="project-state">'+escapeHTML(project.status)+'</span></div><h3>'+escapeHTML(project.name)+'</h3><p>'+escapeHTML(project.description||"No description yet")+'</p><div class="progress-track"><div class="progress-fill" style="width:'+progress+'%"></div></div><div class="project-card-footer"><span>'+open+' OPEN TASK'+(open===1?"":"S")+'</span><span>OPEN PROJECT ↗</span></div></button>';
+  return '<button class="project-card" data-project-open="'+escapeHTML(project.id)+'"><div class="project-topline"><span class="project-glyph">'+escapeHTML(project.symbol||project.name.slice(0,1).toUpperCase())+'</span><span class="project-state">'+escapeHTML(project.status)+'</span></div><h3>'+escapeHTML(project.name)+'</h3><p>'+escapeHTML(project.description||"No description")+'</p><div class="progress-track"><div class="progress-fill" style="width:'+progress+'%"></div></div><div class="project-card-footer"><span>'+open+' OPEN TASK'+(open===1?"":"S")+'</span><span>OPEN ↗</span></div></button>';
 }
 function taskRow(task){
   const project=projectById(task.projectId);
   return '<div class="task-row '+(task.id===focusTaskId?"task-highlight":"")+'"><button class="task-check '+(task.done?"done":"")+'" data-task-toggle="'+escapeHTML(task.id)+'" aria-label="'+(task.done?"Mark task open":"Complete task")+'">'+(task.done?"✓":"")+'</button><span class="task-text '+(task.done?"done":"")+'">'+escapeHTML(task.title)+'</span>'+(project?'<span class="task-project">'+escapeHTML(project.name)+'</span>':'')+'<button class="task-delete" data-task-delete="'+escapeHTML(task.id)+'" aria-label="Delete task">×</button></div>';
 }
 function notePreview(note){
-  const project=projectById(note.projectId);
-  return '<button class="note-preview-item" data-note-edit="'+escapeHTML(note.id)+'"><strong>'+escapeHTML(note.title)+'</strong><p>'+escapeHTML(note.body||"No note content yet")+'</p></button>';
+  return '<button class="note-preview-item" data-note-edit="'+escapeHTML(note.id)+'"><strong>'+escapeHTML(note.title)+'</strong><p>'+escapeHTML(note.body||"No content")+'</p></button>';
 }
-function emptyState(title,description,action){
-  return '<div class="empty-state"><strong>'+escapeHTML(title)+'</strong>'+escapeHTML(description)+(action||"")+'</div>';
+function timerDisplay(){
+  const minutes=Math.floor(focusTimer.seconds/60).toString().padStart(2,"0");
+  const seconds=(focusTimer.seconds%60).toString().padStart(2,"0");
+  return minutes+":"+seconds;
+}
+function taskOptions(){
+  const options=['<option value="">No task selected</option>'];
+  data.tasks.filter(task=>!task.done).forEach(task=>{
+    options.push('<option value="'+escapeHTML(task.id)+'" '+(focusTimer.taskId===task.id?"selected":"")+'>'+escapeHTML(task.title)+'</option>');
+  });
+  return options.join("");
+}
+function renderTimer(){
+  const durationButtons=[10,25,45].map(minutes=>'<button class="duration-button '+(focusTimer.duration===minutes*60?"active":"")+'" data-duration="'+minutes+'">'+minutes+' min</button>').join("");
+  return '<section class="focus-main"><div class="focus-main-head"><strong>Focus timer</strong><span class="focus-status '+(focusTimer.running?"running":"")+'" id="focusStatus">'+(focusTimer.running?"SESSION RUNNING":"READY")+'</span></div><div class="timer-task-wrap"><label for="focusTaskSelect">WORKING ON</label><select class="timer-task-select" id="focusTaskSelect">'+taskOptions()+'</select></div><div class="timer-ring"><svg viewBox="0 0 220 220" aria-hidden="true"><circle class="timer-track" cx="110" cy="110" r="100"></circle><circle class="timer-progress" id="timerProgress" cx="110" cy="110" r="100"></circle></svg><div><div class="timer-digits" id="timerDigits">'+timerDisplay()+'</div><div class="timer-caption">TIME REMAINING</div></div></div><div class="duration-row">'+durationButtons+'</div><div class="timer-actions"><button class="button-primary" id="timerToggle" data-timer-toggle>'+(focusTimer.running?"Pause":"Start focus")+'</button><button class="button-secondary" id="timerReset">Reset</button></div><p class="focus-footnote">The timer keeps running while you move between pages</p></section>';
 }
 function renderHome(){
-  const incomplete=data.tasks.filter(task=>!task.done).length;
-  const finished=data.tasks.filter(task=>task.done).length;
-  const gettingStarted='<section class="getting-started" id="gettingStarted"><div class="section-top"><div><h2 class="section-heading">Start here</h2><p class="section-subtitle">Three parts make up your Nexus workspace</p></div><button class="text-button" id="tourAgain">HOW IT WORKS ↗</button></div><div class="steps-grid"><button class="step-card" data-open="project"><span class="step-number">01</span><span><strong>Projects hold the big picture</strong><small>Give each thing you are making its own space</small></span></button><button class="step-card" data-open="task"><span class="step-number">02</span><span><strong>Tasks hold the next steps</strong><small>Turn a big project into small actions</small></span></button><button class="step-card" data-open="note"><span class="step-number">03</span><span><strong>Notes keep the details</strong><small>Save research, decisions and stray ideas</small></span></button></div></section>';
-  const projects=data.projects.slice(0,3);
   const nextTasks=data.tasks.filter(task=>!task.done).slice(0,4);
-  const recentNotes=data.notes.slice(0,3);
-  return '<section class="home-intro"><div><div class="kicker">YOUR PROJECT WORKSPACE</div><h1>All your projects,<br><span>in one place</span></h1><p class="intro-copy">Keep project plans, next steps and notes together — so you can find your place and get back to work</p><div class="intro-actions"><button class="button-primary" data-open="project">＋ Create a project</button><button class="button-secondary" data-view="projects">Browse projects</button></div></div><div class="intro-art"><div class="art-label">HOW THE PIECES FIT</div><div class="art-flow"><div class="art-node active"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h5"/></svg></div><span class="art-connector"></span><div class="art-node"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6"><path d="m5 12 4 4L19 6"/><path d="M19 13v5H5V6h9"/></svg></div><span class="art-connector"></span><div class="art-node"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.6"><path d="M7 4h10v16H7zM10 8h4M10 12h4M10 16h2"/></svg></div></div><div class="art-caption">PROJECTS　→　TASKS　→　NOTES</div></div></section>'+gettingStarted+
-  '<section class="section-block"><div class="section-title-row"><div><h2>Your projects</h2><p>The main things you are working on</p></div><button class="text-button" data-view="projects">VIEW ALL ↗</button></div>'+(projects.length?'<div class="project-grid">'+projects.map(projectCard).join("")+'</div>':emptyState("Nothing here yet","Create a project and give your work a home",'<div class="empty-actions"><button class="button-primary" data-open="project">Create first project</button></div>'))+'</section>'+
-  '<div class="home-lower"><section class="panel"><div class="panel-header"><strong>Next steps</strong><span>'+incomplete+' OPEN</span></div>'+(nextTasks.length?'<div class="task-list">'+nextTasks.map(taskRow).join("")+'</div>':emptyState("You are all caught up","Add a task when something needs doing",'<div class="empty-actions"><button class="button-secondary" data-open="task">Add a task</button></div>'))+'<div style="margin-top:10px"><button class="text-button" data-view="tasks">OPEN TASK LIST ↗</button></div></section><section class="panel"><div class="panel-header"><strong>Recent notes</strong><span>'+data.notes.length+' SAVED</span></div>'+(recentNotes.length?'<div class="note-preview">'+recentNotes.map(notePreview).join("")+'</div>':emptyState("No notes saved","Keep the details you want to remember",'<div class="empty-actions"><button class="button-secondary" data-open="note">Write a note</button></div>'))+'<div style="margin-top:10px"><button class="text-button" data-view="notes">OPEN NOTEBOOK ↗</button></div></section></div>';
+  const sceneName=sceneLabel(ambiencePrefs.scene);
+  const sceneStatus=audio.playing?"PLAYING":"OFF";
+  const nextTaskMarkup=nextTasks.length?'<div class="task-list">'+nextTasks.map(taskRow).join("")+'</div>':'<div class="task-empty">No open tasks <br><button class="text-button" data-open="task">ADD A TASK</button></div>';
+  return '<div class="home-heading"><div><div class="kicker">FOCUS</div><h1>Focus on one thing</h1><p>Set a timer and keep distractions out of the way</p></div></div><div class="focus-layout">'+renderTimer()+'<aside class="focus-side"><section class="ambient-card '+(audio.playing?"is-playing":"")+'" id="homeAmbientCard"><div class="ambient-card-top"><strong>Ambient sound</strong><span id="homeAmbientStatus">'+sceneStatus+'</span></div><div class="ambient-visual" aria-hidden="true">'+Array.from({length:25},(_,index)=>'<i style="animation-delay:-'+((index%7)*.13)+'s"></i>').join("")+'</div><div class="ambient-current"><div><strong id="homeAmbientName">'+escapeHTML(sceneName)+'</strong><small>Background audio for focus</small></div><button id="homeAmbienceButton">Change sound</button></div></section><section class="next-tasks-card"><div class="card-heading"><strong>Tasks</strong><span>'+data.tasks.filter(task=>!task.done).length+' OPEN</span></div>'+nextTaskMarkup+'<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center"><button class="text-button" data-view="tasks">ALL TASKS</button><button class="text-button" data-open="task">＋ ADD</button></div></section></aside></div><div class="focus-bottom"><div class="focus-bottom-card"><div><strong>Projects</strong><small>'+data.projects.length+' saved</small></div><button data-view="projects">OPEN PROJECTS</button></div><div class="focus-bottom-card"><div><strong>Notes</strong><small>'+data.notes.length+' saved</small></div><button data-view="notes">OPEN NOTES</button></div></div>';
 }
 function renderProjects(){
-  return pageHeading("YOUR WORK","Projects","Each project keeps its description, tasks and notes in one place",'<button class="button-primary" data-open="project">＋ New project</button>')+(data.projects.length?'<div class="project-grid large">'+data.projects.map(projectCard).join("")+'</div>':emptyState("No projects yet","Start with one thing you want to make",'<div class="empty-actions"><button class="button-primary" data-open="project">Create a project</button></div>'));
+  return pageHeading("WORKSPACE","Projects","Create a project to group related tasks and notes",'<button class="button-primary" data-open="project">＋ New project</button>')+(data.projects.length?'<div class="project-grid large">'+data.projects.map(projectCard).join("")+'</div>':emptyState("No projects yet","Create a project when you want to group tasks and notes together",'<div class="empty-actions"><button class="button-primary" data-open="project">Create project</button></div>'));
 }
 function renderProjectDetail(){
   const project=projectById(activeProjectId);
@@ -125,38 +169,281 @@ function renderProjectDetail(){
   const tasks=data.tasks.filter(task=>task.projectId===project.id);
   const notes=data.notes.filter(note=>note.projectId===project.id);
   const complete=tasks.filter(task=>task.done).length;
-  return '<div class="detail-head"><div><div class="page-kicker">PROJECT SPACE</div><h1 class="detail-title">'+escapeHTML(project.name)+'</h1><p class="detail-description">'+escapeHTML(project.description||"No description yet")+'</p></div><div class="page-actions"><button class="button-secondary" data-project-edit="'+escapeHTML(project.id)+'">Edit details</button><button class="button-secondary" data-view="projects">Back</button></div></div><div class="detail-columns"><section class="detail-info"><h3>Next steps <span style="color:#918a92;font-weight:400">· '+complete+' of '+tasks.length+' complete</span></h3>'+(tasks.length?'<div class="task-list">'+tasks.map(taskRow).join("")+'</div>':emptyState("No tasks for this project","Add a task to turn the plan into action"))+'<div style="margin-top:12px"><button class="button-primary" data-open="task" data-project-prefill="'+escapeHTML(project.id)+'">＋ Add project task</button></div></section><aside class="detail-info"><h3>Project details</h3><div class="detail-meta"><div><strong>STATUS</strong><select class="project-status-select" id="projectStatus">'+["Planning","In progress","Building","Writing","On hold","Complete"].map(status=>'<option '+(project.status===status?"selected":"")+'>'+status+'</option>').join("")+'</select></div><div><strong>CREATED</strong>'+formatDate(project.created)+'</div><div><strong>PROGRESS</strong>'+projectProgress(project.id)+'% of linked tasks completed</div></div><div class="progress-track" style="margin-top:13px"><div class="progress-fill" style="width:'+projectProgress(project.id)+'%"></div></div><div style="height:1px;background:#e8e4dd;margin:17px 0"></div><h3>Project notes</h3>'+(notes.length?'<div class="note-preview">'+notes.map(notePreview).join("")+'</div>':emptyState("No notes linked yet","Use notes to keep project details close"))+'<div style="margin-top:10px"><button class="button-secondary" data-open="note" data-project-prefill="'+escapeHTML(project.id)+'">＋ Add project note</button></div><div style="margin-top:18px"><button class="button-danger" data-project-delete="'+escapeHTML(project.id)+'">Delete project</button></div></aside></div>';
+  return '<div class="project-detail-head"><div><div class="page-kicker">PROJECT</div><h1 class="detail-title">'+escapeHTML(project.name)+'</h1><p class="detail-description">'+escapeHTML(project.description||"No description")+'</p></div><div class="page-actions"><button class="button-secondary" data-project-edit="'+escapeHTML(project.id)+'">Edit</button><button class="button-secondary" data-view="projects">Back</button></div></div><div class="detail-columns"><section class="detail-info"><h3>Tasks <span style="color:#918a92;font-weight:400">· '+complete+' of '+tasks.length+' complete</span></h3>'+(tasks.length?'<div class="task-list">'+tasks.map(taskRow).join("")+'</div>':emptyState("No tasks yet","Add a task to this project"))+'<div style="margin-top:12px"><button class="button-primary" data-open="task" data-project-prefill="'+escapeHTML(project.id)+'">＋ Add task</button></div></section><aside class="detail-info"><h3>Project details</h3><div class="detail-meta"><div><strong>STATUS</strong><select class="project-status-select" id="projectStatus">'+["Planning","In progress","On hold","Complete"].map(status=>'<option '+(project.status===status?"selected":"")+'>'+status+'</option>').join("")+'</select></div><div><strong>CREATED</strong>'+formatDate(project.created)+'</div><div><strong>PROGRESS</strong>'+projectProgress(project.id)+'% complete</div></div><div class="progress-track" style="margin-top:13px"><div class="progress-fill" style="width:'+projectProgress(project.id)+'%"></div></div><div style="height:1px;background:#e8e4dd;margin:17px 0"></div><h3>Notes</h3>'+(notes.length?'<div class="note-preview">'+notes.map(notePreview).join("")+'</div>':emptyState("No notes yet","Add a note to this project"))+'<div style="margin-top:10px"><button class="button-secondary" data-open="note" data-project-prefill="'+escapeHTML(project.id)+'">＋ Add note</button></div><div style="margin-top:18px"><button class="button-danger" data-project-delete="'+escapeHTML(project.id)+'">Delete project</button></div></aside></div>';
 }
 function renderTasks(){
   const filtered=data.tasks.filter(task=>taskFilter==="all"||(taskFilter==="open"&&!task.done)||(taskFilter==="done"&&task.done));
-  return pageHeading("YOUR WORK","Tasks","A simple list of the next things that need doing",'<button class="button-primary" data-open="task">＋ Add task</button>')+'<div class="filter-row">'+["all","open","done"].map(filter=>'<button class="filter-button '+(taskFilter===filter?"active":"")+'" data-task-filter="'+filter+'">'+({all:"All tasks",open:"To do",done:"Completed"}[filter])+'</button>').join("")+'</div><section class="panel">'+(filtered.length?'<div class="task-list">'+filtered.map(taskRow).join("")+'</div>':emptyState(taskFilter==="done"?"No completed tasks yet":"Nothing on this list","Add a task or change the filter"))+'</section>';
+  const createForm='<form class="task-add-row" id="quickTaskForm"><input name="quickTask" maxlength="110" placeholder="Add a task" required><button aria-label="Add task">＋</button></form>';
+  return pageHeading("WORKSPACE","Tasks","Add the next thing you need to do",'<button class="button-primary" data-open="task">＋ New task</button>')+'<div class="filter-row">'+["all","open","done"].map(filter=>'<button class="filter-button '+(taskFilter===filter?"active":"")+'" data-task-filter="'+filter+'">'+({all:"All",open:"To do",done:"Completed"}[filter])+'</button>').join("")+'</div><section class="task-list-panel">'+createForm+(filtered.length?'<div class="task-list">'+filtered.map(taskRow).join("")+'</div>':emptyState(taskFilter==="done"?"No completed tasks":"No tasks yet","Add a task above or change the filter"))+'</section>';
 }
 function renderNotes(){
-  return pageHeading("YOUR WORK","Notes","Keep ideas, details and decisions beside your projects",'<button class="button-primary" data-open="note">＋ New note</button>')+(data.notes.length?'<div class="note-grid">'+data.notes.map(note=>'<button class="note-card" data-note-edit="'+escapeHTML(note.id)+'"><div class="note-card-top"><span>NOTEBOOK</span><span>'+escapeHTML(projectById(note.projectId)?.name||"GENERAL")+'</span></div><h3>'+escapeHTML(note.title)+'</h3><p>'+escapeHTML(note.body||"No content yet")+'</p><small>UPDATED '+formatDate(note.updated).toUpperCase()+'</small></button>').join("")+'</div>':emptyState("Your notebook is empty","Add a note to keep the useful details somewhere easy to find",'<div class="empty-actions"><button class="button-primary" data-open="note">Write a note</button></div>'));
-}
-function timerDisplay(){
-  const minutes=Math.floor(focusTimer.seconds/60).toString().padStart(2,"0");
-  const seconds=(focusTimer.seconds%60).toString().padStart(2,"0");
-  return minutes+":"+seconds;
-}
-function renderFocus(){
-  return pageHeading("PERSONAL","Focus timer","Give one task your attention for a little while")+'<div class="focus-layout"><section class="focus-main"><div><div class="timer-face"><div><div class="timer-digits" id="timerDigits">'+timerDisplay()+'</div><div class="timer-caption">MINUTES LEFT</div></div></div><div class="timer-actions"><button class="button-primary" id="timerToggle">'+(focusTimer.running?"Pause":"Start focus")+'</button><button class="button-secondary" id="timerReset">Reset</button></div></div></section><aside class="focus-presets"><h3>Choose a session</h3>'+[{name:"Quick reset",minutes:10},{name:"Focus session",minutes:25},{name:"Long session",minutes:45}].map(item=>'<button class="preset '+(focusTimer.duration===item.minutes*60?"active":"")+'" data-duration="'+item.minutes+'">'+item.name+'<span>'+item.minutes+' MIN</span></button>').join("")+'<p class="task-side-copy" style="margin-top:14px">Pick one thing to work on, start the timer and let the rest wait</p></aside></div>';
+  return pageHeading("WORKSPACE","Notes","Save details and ideas you want to keep",'<button class="button-primary" data-open="note">＋ New note</button>')+(data.notes.length?'<div class="note-grid">'+data.notes.map(note=>'<button class="note-card" data-note-edit="'+escapeHTML(note.id)+'"><div class="note-card-top"><span>NOTE</span><span>'+escapeHTML(projectById(note.projectId)?.name||"UNLINKED")+'</span></div><h3>'+escapeHTML(note.title)+'</h3><p>'+escapeHTML(note.body||"")+'</p><small>UPDATED '+formatDate(note.updated).toUpperCase()+'</small></button>').join("")+'</div>':emptyState("No notes yet","Create a note to keep useful information in one place",'<div class="empty-actions"><button class="button-primary" data-open="note">Create note</button></div>'));
 }
 function renderSettings(){
-  return pageHeading("PERSONAL","Workspace","A few details about how this Nexus copy works")+'<div class="workspace-settings"><section class="settings-card"><h3>Saved on this device</h3><p>Your projects, tasks and notes are stored in this browser — nothing is uploaded to an account or shared with other people</p><div class="setting-actions"><button class="button-primary" id="exportData">Export workspace</button><button class="button-secondary" id="replayTourPage">Show quick tour</button></div></section><section class="settings-card"><h3>Keep a backup</h3><p>Export a copy before clearing site data or switching browsers</p><div class="setting-actions"><button class="button-danger" id="resetData">Reset workspace</button></div></section></div>';
+  return pageHeading("PREFERENCES","Settings","Manage your saved workspace and sound")+'<div class="workspace-settings"><section class="settings-card"><h3>Workspace data</h3><p>Your projects, tasks and notes are saved in this browser on this device</p><div class="setting-actions"><button class="button-primary" id="exportData">Export workspace</button><button class="button-danger" id="resetData">Clear workspace</button></div></section><section class="settings-card"><h3>Ambient sound</h3><p>Choose a sound in the top bar. It continues while you move between pages. Audio begins after you press Play</p><div class="setting-actions"><button class="button-secondary" id="settingsAmbienceButton">Open sound controls</button></div></section></div>';
 }
 function render(){
-  const page=activeProjectId?renderProjectDetail():({home:renderHome,projects:renderProjects,tasks:renderTasks,notes:renderNotes,focus:renderFocus,settings:renderSettings}[currentView]||renderHome)();
+  const page=activeProjectId?renderProjectDetail():({home:renderHome,projects:renderProjects,tasks:renderTasks,notes:renderNotes,settings:renderSettings}[currentView]||renderHome)();
   $("#content").innerHTML=page;
-  const crumb=activeProjectId?"PROJECT":currentView.toUpperCase();
-  $("#crumbName").textContent=crumb;
+  $("#crumbName").textContent=activeProjectId?"PROJECT":({home:"FOCUS",projects:"PROJECTS",tasks:"TASKS",notes:"NOTES",settings:"SETTINGS"}[currentView]||"FOCUS");
   $$(".nav-link").forEach(button=>button.classList.toggle("active",!activeProjectId&&button.dataset.view===currentView));
   $("#projectCount").textContent=data.projects.length;
   $("#taskCount").textContent=data.tasks.filter(task=>!task.done).length;
+  updateTimerUI();
+  syncAmbienceUI();
   if(activeProjectId){
     const select=$("#projectStatus");
-    if(select)select.addEventListener("change",()=>{const project=projectById(activeProjectId);if(project){project.status=select.value;saveData();toast("Project status updated");render();}});
+    if(select)select.addEventListener("change",()=>{
+      const project=projectById(activeProjectId);
+      if(project){project.status=select.value;saveData();render();toast("Status updated");}
+    });
   }
+}
+function sceneLabel(scene){
+  return ({rain:"Soft rain",brown:"Brown noise",wind:"Wind",fire:"Fireplace"})[scene]||"Soft rain";
+}
+function syncAmbienceUI(){
+  const button=$("#ambienceButton");
+  const status=$("#ambienceButtonStatus");
+  const description=$("#ambienceDescription");
+  const play=$("#ambiencePlay");
+  const volume=$("#ambienceVolume");
+  const volumeValue=$("#ambienceVolumeValue");
+  if(button){
+    button.classList.toggle("is-playing",audio.playing);
+    button.setAttribute("aria-label",audio.playing?"Ambient sound playing":"Ambient sound off");
+  }
+  if(status)status.textContent=audio.playing?"On":"Off";
+  if(description)description.textContent=(audio.playing?"Playing · ":"Off · ")+sceneLabel(ambiencePrefs.scene);
+  if(play)play.textContent=audio.playing?"Pause":"Play";
+  if(volume&&Number(volume.value)!==ambiencePrefs.volume)volume.value=String(ambiencePrefs.volume);
+  if(volumeValue)volumeValue.textContent=ambiencePrefs.volume+"%";
+  $$(".scene-button").forEach(button=>button.classList.toggle("active",button.dataset.scene===ambiencePrefs.scene));
+  const homeName=$("#homeAmbientName");
+  const homeStatus=$("#homeAmbientStatus");
+  const homeCard=$("#homeAmbientCard");
+  if(homeName)homeName.textContent=sceneLabel(ambiencePrefs.scene);
+  if(homeStatus)homeStatus.textContent=audio.playing?"PLAYING":"OFF";
+  if(homeCard)homeCard.classList.toggle("is-playing",audio.playing);
+}
+function setAmbiencePanel(open){
+  const panel=$("#ambiencePanel");
+  const button=$("#ambienceButton");
+  if(!panel||!button)return;
+  panel.hidden=!open;
+  button.setAttribute("aria-expanded",open?"true":"false");
+}
+function toggleAmbiencePanel(){
+  const panel=$("#ambiencePanel");
+  setAmbiencePanel(!!panel&&panel.hidden);
+}
+function createNoiseBuffer(context){
+  const length=context.sampleRate*3;
+  const buffer=context.createBuffer(1,length,context.sampleRate);
+  const channel=buffer.getChannelData(0);
+  for(let i=0;i<length;i++)channel[i]=Math.random()*2-1;
+  return buffer;
+}
+function createAudioGraph(){
+  const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+  if(!AudioContextClass)throw new Error("Web Audio is not available in this browser");
+  const context=new AudioContextClass();
+  const master=context.createGain();
+  master.gain.value=0;
+  master.connect(context.destination);
+  const source=context.createBufferSource();
+  source.buffer=createNoiseBuffer(context);
+  source.loop=true;
+  const highpass=context.createBiquadFilter();
+  highpass.type="highpass";
+  highpass.frequency.value=120;
+  highpass.Q.value=.55;
+  const lowpass=context.createBiquadFilter();
+  lowpass.type="lowpass";
+  lowpass.frequency.value=1800;
+  lowpass.Q.value=.35;
+  const noiseGain=context.createGain();
+  noiseGain.gain.value=.22;
+  source.connect(highpass);
+  highpass.connect(lowpass);
+  lowpass.connect(noiseGain);
+  noiseGain.connect(master);
+  source.start();
+
+  const crackleSource=context.createBufferSource();
+  crackleSource.buffer=source.buffer;
+  crackleSource.loop=true;
+  const crackleFilter=context.createBiquadFilter();
+  crackleFilter.type="bandpass";
+  crackleFilter.frequency.value=1450;
+  crackleFilter.Q.value=.7;
+  const crackleGain=context.createGain();
+  crackleGain.gain.value=0;
+  crackleSource.connect(crackleFilter);
+  crackleFilter.connect(crackleGain);
+  crackleGain.connect(master);
+  crackleSource.start();
+
+  const lfo=context.createOscillator();
+  lfo.type="sine";
+  lfo.frequency.value=.075;
+  const lfoDepth=context.createGain();
+  lfoDepth.gain.value=0;
+  lfo.connect(lfoDepth);
+  lfoDepth.connect(noiseGain.gain);
+  lfo.start();
+
+  audio.context=context;
+  audio.master=master;
+  audio.noiseGain=noiseGain;
+  audio.highpass=highpass;
+  audio.lowpass=lowpass;
+  audio.noiseSource=source;
+  audio.crackleGain=crackleGain;
+  audio.crackleSource=crackleSource;
+  audio.crackleFilter=crackleFilter;
+  audio.lfo=lfo;
+  audio.lfoDepth=lfoDepth;
+  configureScene();
+}
+function configureScene(){
+  if(!audio.context)return;
+  const now=audio.context.currentTime;
+  const settings={
+    rain:{high:170,low:2200,gain:.2,modulation:0},
+    brown:{high:28,low:260,gain:.38,modulation:0},
+    wind:{high:55,low:760,gain:.26,modulation:.09},
+    fire:{high:85,low:1050,gain:.19,modulation:0}
+  }[ambiencePrefs.scene];
+  audio.highpass.frequency.setTargetAtTime(settings.high,now,.35);
+  audio.lowpass.frequency.setTargetAtTime(settings.low,now,.45);
+  audio.noiseGain.gain.setTargetAtTime(settings.gain,now,.35);
+  audio.lfoDepth.gain.setTargetAtTime(settings.modulation,now,.5);
+  if(ambiencePrefs.scene==="fire"){
+    audio.crackleFilter.frequency.setTargetAtTime(1550,now,.4);
+    startCrackles();
+  }else{
+    stopCrackles();
+    audio.crackleGain.gain.setTargetAtTime(0,now,.15);
+  }
+}
+function startCrackles(){
+  if(audio.crackleInterval||!audio.context)return;
+  audio.crackleInterval=setInterval(()=>{
+    if(!audio.playing||ambiencePrefs.scene!=="fire"||!audio.context)return;
+    const now=audio.context.currentTime;
+    const peak=.018+Math.random()*.035;
+    const end=now+.035+Math.random()*.075;
+    audio.crackleGain.gain.cancelScheduledValues(now);
+    audio.crackleGain.gain.setValueAtTime(.0001,now);
+    audio.crackleGain.gain.linearRampToValueAtTime(peak,now+.008);
+    audio.crackleGain.gain.exponentialRampToValueAtTime(.0001,end);
+  },190+Math.random()*160);
+}
+function stopCrackles(){
+  if(audio.crackleInterval){clearInterval(audio.crackleInterval);audio.crackleInterval=null;}
+}
+async function toggleAmbience(){
+  try{
+    if(!audio.context)createAudioGraph();
+    if(audio.playing){
+      audio.playing=false;
+      stopCrackles();
+      const context=audio.context;
+      audio.master.gain.setTargetAtTime(0,context.currentTime,.16);
+      syncAmbienceUI();
+      setTimeout(()=>{if(!audio.playing&&context.state==="running")context.suspend();},650);
+    }else{
+      await audio.context.resume();
+      audio.playing=true;
+      configureScene();
+      audio.master.gain.cancelScheduledValues(audio.context.currentTime);
+      audio.master.gain.setTargetAtTime((ambiencePrefs.volume/100)*.55,audio.context.currentTime,.7);
+      syncAmbienceUI();
+    }
+  }catch(error){
+    audio.playing=false;
+    syncAmbienceUI();
+    toast("Ambient audio could not start in this browser");
+  }
+}
+function changeScene(scene){
+  if(!["rain","brown","wind","fire"].includes(scene))return;
+  ambiencePrefs.scene=scene;
+  saveAmbiencePrefs();
+  if(audio.playing)configureScene();
+  syncAmbienceUI();
+}
+function changeVolume(value){
+  ambiencePrefs.volume=Math.max(0,Math.min(100,Number(value)||0));
+  saveAmbiencePrefs();
+  if(audio.context&&audio.master&&audio.playing){
+    audio.master.gain.setTargetAtTime((ambiencePrefs.volume/100)*.55,audio.context.currentTime,.12);
+  }
+  syncAmbienceUI();
+}
+function updateTimerUI(){
+  const digits=$("#timerDigits");
+  if(digits)digits.textContent=timerDisplay();
+  const progress=$("#timerProgress");
+  if(progress){
+    const circumference=2*Math.PI*100;
+    const ratio=focusTimer.duration?focusTimer.seconds/focusTimer.duration:0;
+    progress.style.strokeDasharray=String(circumference);
+    progress.style.strokeDashoffset=String(circumference*(1-ratio));
+  }
+  const button=$("#timerToggle");
+  if(button)button.textContent=focusTimer.running?"Pause":"Start focus";
+  const status=$("#focusStatus");
+  if(status){
+    status.textContent=focusTimer.running?"SESSION RUNNING":"READY";
+    status.classList.toggle("running",focusTimer.running);
+  }
+  const running=$("#runningTimer");
+  if(running)running.hidden=!focusTimer.running;
+  const runningValue=$("#runningTimerValue");
+  if(runningValue)runningValue.textContent=timerDisplay();
+  const persistent=$("#persistentTimerToggle");
+  if(persistent)persistent.textContent="Pause";
+  $$(".duration-button").forEach(item=>item.classList.toggle("active",Number(item.dataset.duration)*60===focusTimer.duration));
+}
+function timerTick(){
+  if(focusTimer.seconds>0)focusTimer.seconds--;
+  if(focusTimer.seconds<=0){
+    focusTimer.seconds=0;
+    clearInterval(focusTimer.interval);
+    focusTimer.interval=null;
+    focusTimer.running=false;
+    toast("Focus session complete");
+  }
+  updateTimerUI();
+}
+function toggleTimer(){
+  if(focusTimer.running){
+    clearInterval(focusTimer.interval);
+    focusTimer.interval=null;
+    focusTimer.running=false;
+  }else{
+    if(focusTimer.seconds<=0)focusTimer.seconds=focusTimer.duration;
+    focusTimer.running=true;
+    focusTimer.interval=setInterval(timerTick,1000);
+  }
+  updateTimerUI();
+}
+function resetTimer(){
+  clearInterval(focusTimer.interval);
+  focusTimer.interval=null;
+  focusTimer.running=false;
+  focusTimer.seconds=focusTimer.duration;
+  updateTimerUI();
+}
+function selectDuration(minutes){
+  clearInterval(focusTimer.interval);
+  focusTimer.interval=null;
+  focusTimer.running=false;
+  focusTimer.duration=minutes*60;
+  focusTimer.seconds=focusTimer.duration;
+  updateTimerUI();
 }
 function openModal(type,options){
   const opts=options||{};
@@ -165,31 +452,27 @@ function openModal(type,options){
   const projectId=opts.projectId||null;
   let title="",fields="",wide=false;
   if(type==="chooser"){
-    title="Create something";
-    fields='<div class="steps-grid" style="grid-template-columns:1fr"><button class="step-card" data-choice="project"><span class="step-number">01</span><span><strong>Project</strong><small>Start a new piece of work</small></span></button><button class="step-card" data-choice="task"><span class="step-number">02</span><span><strong>Task</strong><small>Add the next thing to do</small></span></button><button class="step-card" data-choice="note"><span class="step-number">03</span><span><strong>Note</strong><small>Save an idea or useful detail</small></span></button></div>';
+    title="Add to Nexus";
+    fields='<div class="choice-list"><button class="choice-button" data-choice="project"><span class="choice-icon">P</span><span><strong>Project</strong><small>Group related work together</small></span></button><button class="choice-button" data-choice="task"><span class="choice-icon">✓</span><span><strong>Task</strong><small>Add something you need to do</small></span></button><button class="choice-button" data-choice="note"><span class="choice-icon">N</span><span><strong>Note</strong><small>Save information or an idea</small></span></button></div>';
   }
   if(type==="project"){
     const project=projectById(editingId)||{};
-    title=editingId?"Edit project":"Create a project";
-    fields='<label>PROJECT NAME<input class="field-input" name="name" maxlength="48" value="'+escapeHTML(project.name||"")+'" placeholder="For example, a game or a website" required></label><label>WHAT IS IT ABOUT?<textarea class="field-textarea" name="description" maxlength="240" placeholder="A sentence to remind you what this project is">'+escapeHTML(project.description||"")+'</textarea></label><label>SHORT MARK<input class="field-input" name="symbol" maxlength="2" value="'+escapeHTML(project.symbol||"")+'" placeholder="A letter or symbol"></label><label>STATUS<select class="field-select" name="status">'+["Planning","In progress","Building","Writing","On hold","Complete"].map(status=>'<option '+((project.status||"In progress")===status?"selected":"")+'>'+status+'</option>').join("")+'</select></label>';
+    title=editingId?"Edit project":"New project";
+    fields='<label>PROJECT NAME<input class="field-input" name="name" maxlength="48" value="'+escapeHTML(project.name||"")+'" placeholder="Name" required></label><label>DESCRIPTION<textarea class="field-textarea" name="description" maxlength="240" placeholder="What is this project about?">'+escapeHTML(project.description||"")+'</textarea></label><label>STATUS<select class="field-select" name="status">'+["Planning","In progress","On hold","Complete"].map(status=>'<option '+((project.status||"Planning")===status?"selected":"")+'>'+status+'</option>').join("")+'</select></label>';
   }
   if(type==="task"){
-    title="Add a task";
-    fields='<label>WHAT NEEDS DOING?<input class="field-input" name="title" maxlength="110" placeholder="Write one clear next step" required></label><label>PROJECT<select class="field-select" name="projectId"><option value="">No project</option>'+data.projects.map(project=>'<option value="'+escapeHTML(project.id)+'" '+(projectId===project.id?"selected":"")+'>'+escapeHTML(project.name)+'</option>').join("")+'</select></label>';
+    title="New task";
+    fields='<label>TASK<input class="field-input" name="title" maxlength="110" placeholder="What needs doing?" required></label><label>PROJECT<select class="field-select" name="projectId"><option value="">No project</option>'+data.projects.map(project=>'<option value="'+escapeHTML(project.id)+'" '+(projectId===project.id?"selected":"")+'>'+escapeHTML(project.name)+'</option>').join("")+'</select></label>';
   }
   if(type==="note"){
     const note=data.notes.find(item=>item.id===editingId)||{};
     title=editingId?"Edit note":"New note";
     wide=true;
-    fields='<label>NOTE TITLE<input class="field-input" name="title" maxlength="60" value="'+escapeHTML(note.title||"")+'" placeholder="Give this note a name" required></label><label>KEEP THE DETAILS HERE<textarea class="field-textarea" name="body" maxlength="5000" style="height:180px" placeholder="Write an idea, a decision or something to remember">'+escapeHTML(note.body||"")+'</textarea></label><label>PROJECT<select class="field-select" name="projectId"><option value="">General note</option>'+data.projects.map(project=>'<option value="'+escapeHTML(project.id)+'" '+((note.projectId||projectId)===project.id?"selected":"")+'>'+escapeHTML(project.name)+'</option>').join("")+'</select></label>';
+    fields='<label>TITLE<input class="field-input" name="title" maxlength="60" value="'+escapeHTML(note.title||"")+'" placeholder="Title" required></label><label>NOTE<textarea class="field-textarea" name="body" maxlength="5000" style="height:180px" placeholder="Write here">'+escapeHTML(note.body||"")+'</textarea></label><label>PROJECT<select class="field-select" name="projectId"><option value="">No project</option>'+data.projects.map(project=>'<option value="'+escapeHTML(project.id)+'" '+((note.projectId||projectId)===project.id?"selected":"")+'>'+escapeHTML(project.name)+'</option>').join("")+'</select></label>';
   }
   if(type==="search"){
-    title="Search your workspace";
+    title="Search";
     fields='<input class="field-input" id="searchInput" type="search" placeholder="Search projects, tasks and notes" value="'+escapeHTML(searchQuery)+'" autocomplete="off"><div class="search-results" id="searchResults"></div>';
-  }
-  if(type==="tour"){
-    renderTourModal();
-    return;
   }
   $("#modalLayer").innerHTML='<div class="modal '+(wide?"wide":"")+'" role="dialog" aria-modal="true"><div class="modal-header"><h2>'+title+'</h2><button class="modal-close" type="button" data-close aria-label="Close">×</button></div>'+(type==="chooser"?fields:'<form class="modal-form" id="modalForm">'+fields+'<div class="modal-actions"><button class="button-secondary" type="button" data-close>Cancel</button><button class="button-primary" type="submit">Save</button></div></form>')+'</div>';
   $("#modalLayer").classList.add("open");
@@ -202,54 +485,34 @@ function openModal(type,options){
     if(first)first.focus();
   }
 }
-function renderTourModal(){
-  const steps=[
-    {number:"01",title:"This is your project workspace",body:"Nexus is a place to keep the things you are making in one spot — not a social network, and not another complicated planner"},
-    {number:"02",title:"Projects hold the big picture",body:"Create a project for something you are building or writing, then keep its tasks and notes attached to it"},
-    {number:"03",title:"Tasks and notes keep it moving",body:"Tasks are the next actions, notes are the details, and the focus timer gives you a little quiet time to work"}
-  ];
-  const step=steps[tourStep];
-  $("#modalLayer").innerHTML='<div class="modal" role="dialog" aria-modal="true"><div class="tour-progress">'+steps.map((item,index)=>'<span class="'+(index<=tourStep?"active":"")+'"></span>').join("")+'</div><div class="tour-step">'+step.number+'</div><div class="modal-header"><h2>'+step.title+'</h2><button class="modal-close" type="button" data-close aria-label="Close">×</button></div><p class="tour-copy">'+step.body+'</p><div class="tour-footer"><button class="text-button" data-tour-skip>SKIP TOUR</button><button class="button-primary" data-tour-next>'+(tourStep===steps.length-1?"Open Nexus":"Next step →")+'</button></div></div>';
-  $("#modalLayer").classList.add("open");
-  $("#modalLayer").setAttribute("aria-hidden","false");
-}
 function closeModal(){
   $("#modalLayer").classList.remove("open");
   $("#modalLayer").setAttribute("aria-hidden","true");
   modalType="";
   editingId=null;
 }
-function completeTour(){
-  try{localStorage.setItem("nexus-tour-complete","yes");}catch(error){}
-  closeModal();
-}
 function saveForm(form){
   const values=Object.fromEntries(new FormData(form).entries());
   if(modalType==="project"){
     if(editingId){
       const project=projectById(editingId);
-      if(project)Object.assign(project,values);
-      activity("Updated project details","Project");
+      if(project)Object.assign(project,{name:values.name.trim(),description:values.description.trim(),status:values.status});
     }else{
-      const project={id:id("project"),name:values.name.trim(),description:values.description.trim(),symbol:values.symbol.trim()||values.name.trim().slice(0,1).toUpperCase(),status:values.status,created:Date.now()};
+      const project={id:makeId("project"),name:values.name.trim(),description:values.description.trim(),symbol:values.name.trim().slice(0,1).toUpperCase(),status:values.status,created:Date.now()};
       data.projects.unshift(project);
       activeProjectId=project.id;
       currentView="projects";
-      activity("Created "+project.name,"Project");
     }
   }
   if(modalType==="task"){
-    data.tasks.unshift({id:id("task"),title:values.title.trim(),projectId:values.projectId||null,done:false,created:Date.now()});
-    activity("Added a task","Task");
+    data.tasks.unshift({id:makeId("task"),title:values.title.trim(),projectId:values.projectId||null,done:false,created:Date.now()});
   }
   if(modalType==="note"){
     if(editingId){
       const note=data.notes.find(item=>item.id===editingId);
       if(note)Object.assign(note,{title:values.title.trim(),body:values.body,projectId:values.projectId||null,updated:Date.now()});
-      activity("Updated a note","Note");
     }else{
-      data.notes.unshift({id:id("note"),title:values.title.trim(),body:values.body,projectId:values.projectId||null,updated:Date.now()});
-      activity("Saved a note","Note");
+      data.notes.unshift({id:makeId("note"),title:values.title.trim(),body:values.body,projectId:values.projectId||null,updated:Date.now()});
     }
   }
   saveData();
@@ -265,12 +528,12 @@ function deleteProject(projectId){
   data.notes.forEach(note=>{if(note.projectId===projectId)note.projectId=null;});
   activeProjectId=null;
   currentView="projects";
-  activity("Deleted "+project.name,"Project");
   saveData();
   render();
 }
 function deleteTask(taskId){
   data.tasks=data.tasks.filter(task=>task.id!==taskId);
+  if(focusTimer.taskId===taskId)focusTimer.taskId="";
   saveData();
   render();
 }
@@ -278,6 +541,7 @@ function toggleTask(taskId){
   const task=data.tasks.find(item=>item.id===taskId);
   if(!task)return;
   task.done=!task.done;
+  if(task.done&&focusTimer.taskId===taskId)focusTimer.taskId="";
   saveData();
   render();
 }
@@ -285,61 +549,12 @@ function drawSearchResults(){
   const root=$("#searchResults");
   if(!root)return;
   const query=searchQuery.trim().toLowerCase();
-  if(!query){root.innerHTML='<div class="empty-state">Type a word to search your projects, tasks and notes</div>';return;}
+  if(!query){root.innerHTML='<div class="empty-state">Type to search projects, tasks and notes</div>';return;}
   const results=[];
   data.projects.forEach(project=>{if((project.name+" "+project.description).toLowerCase().includes(query))results.push({kind:"PROJECT",title:project.name,detail:project.description,id:project.id});});
-  data.tasks.forEach(task=>{if(task.title.toLowerCase().includes(query))results.push({kind:"TASK",title:task.title,detail:projectById(task.projectId)?.name||"General task",id:task.id});});
-  data.notes.forEach(note=>{if((note.title+" "+note.body).toLowerCase().includes(query))results.push({kind:"NOTE",title:note.title,detail:projectById(note.projectId)?.name||"General note",id:note.id});});
-  root.innerHTML=results.length?results.slice(0,12).map(result=>'<button class="search-result" data-search-kind="'+result.kind+'" data-search-id="'+escapeHTML(result.id)+'"><span class="result-kind">'+result.kind.slice(0,1)+'</span><span><strong>'+escapeHTML(result.title)+'</strong><small>'+escapeHTML(result.detail)+'</small></span></button>').join(""):'<div class="empty-state">No matching items</div>';
-}
-function exportWorkspace(){
-  const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),...data},null,2)],{type:"application/json"});
-  const url=URL.createObjectURL(blob);
-  const anchor=document.createElement("a");
-  anchor.href=url;anchor.download="nexus-workspace.json";anchor.click();
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
-  toast("Workspace export created");
-}
-function resetWorkspace(){
-  if(!confirm("Reset this Nexus workspace on this device? This cannot be undone"))return;
-  data=clone(SEED);
-  activeProjectId=null;
-  currentView="home";
-  saveData();
-  render();
-  toast("Workspace reset");
-}
-function timerTick(){
-  if(focusTimer.seconds>0)focusTimer.seconds--;
-  if(focusTimer.seconds<=0){
-    clearInterval(focusTimer.interval);
-    focusTimer.interval=null;
-    focusTimer.running=false;
-    toast("Focus session complete");
-  }
-  const digits=$("#timerDigits");
-  const toggle=$("#timerToggle");
-  if(digits)digits.textContent=timerDisplay();
-  if(toggle)toggle.textContent=focusTimer.running?"Pause":"Start focus";
-}
-function toggleTimer(){
-  if(focusTimer.running){
-    clearInterval(focusTimer.interval);
-    focusTimer.interval=null;
-    focusTimer.running=false;
-  }else{
-    if(focusTimer.seconds===0)focusTimer.seconds=focusTimer.duration;
-    focusTimer.running=true;
-    focusTimer.interval=setInterval(timerTick,1000);
-  }
-  render();
-}
-function resetTimer(){
-  clearInterval(focusTimer.interval);
-  focusTimer.interval=null;
-  focusTimer.running=false;
-  focusTimer.seconds=focusTimer.duration;
-  render();
+  data.tasks.forEach(task=>{if(task.title.toLowerCase().includes(query))results.push({kind:"TASK",title:task.title,detail:projectById(task.projectId)?.name||"Task",id:task.id});});
+  data.notes.forEach(note=>{if((note.title+" "+note.body).toLowerCase().includes(query))results.push({kind:"NOTE",title:note.title,detail:projectById(note.projectId)?.name||"Note",id:note.id});});
+  root.innerHTML=results.length?results.slice(0,12).map(result=>'<button class="search-result" data-search-kind="'+result.kind+'" data-search-id="'+escapeHTML(result.id)+'"><span class="result-kind">'+result.kind.slice(0,1)+'</span><span><strong>'+escapeHTML(result.title)+'</strong><small>'+escapeHTML(result.detail)+'</small></span></button>').join(""):'<div class="empty-state">No results</div>';
 }
 function openSearchResult(kind,itemId){
   closeModal();
@@ -347,29 +562,38 @@ function openSearchResult(kind,itemId){
   if(kind==="TASK"){currentView="tasks";activeProjectId=null;taskFilter="all";focusTaskId=itemId;render();return;}
   if(kind==="NOTE"){openModal("note",{id:itemId});return;}
 }
+function exportWorkspace(){
+  const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),...data},null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const anchor=document.createElement("a");
+  anchor.href=url;
+  anchor.download="nexus-workspace.json";
+  anchor.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  toast("Export created");
+}
+function resetWorkspace(){
+  if(!confirm("Clear all projects, tasks and notes from this browser?"))return;
+  data=clone(EMPTY_DATA);
+  activeProjectId=null;
+  currentView="home";
+  saveData();
+  render();
+  toast("Workspace cleared");
+}
+function openSearch(){searchQuery="";openModal("search");}
 function handleClick(event){
   const target=event.target;
   const viewButton=target.closest("[data-view]");
   if(viewButton){setView(viewButton.dataset.view);return;}
   const open=target.closest("[data-open]");
   if(open){
-    const options={projectId:open.dataset.projectPrefill||null};
-    openModal(open.dataset.open,options);
+    openModal(open.dataset.open,{projectId:open.dataset.projectPrefill||null});
     return;
   }
-  if(target.closest("[data-close]")){if(modalType==="tour")completeTour();else closeModal();return;}
-  if(target.closest("[data-choice]")){
-    const choice=target.closest("[data-choice]").dataset.choice;
-    closeModal();openModal(choice);return;
-  }
-  if(target.closest("[data-tour-next]")){
-    if(tourStep<2){tourStep++;renderTourModal();}else completeTour();
-    return;
-  }
-  if(target.closest("[data-tour-skip]")){completeTour();return;}
-  if(target.closest("[data-tour-again]")||target.closest("#tourAgain")||target.closest("#replayTour")||target.closest("#replayTourPage")){
-    tourStep=0;openModal("tour");return;
-  }
+  if(target.closest("[data-close]")){closeModal();return;}
+  const choice=target.closest("[data-choice]");
+  if(choice){const selected=choice.dataset.choice;closeModal();openModal(selected);return;}
   const projectOpen=target.closest("[data-project-open]");
   if(projectOpen){activeProjectId=projectOpen.dataset.projectOpen;currentView="projects";render();return;}
   const projectEdit=target.closest("[data-project-edit]");
@@ -385,13 +609,25 @@ function handleClick(event){
   const filter=target.closest("[data-task-filter]");
   if(filter){taskFilter=filter.dataset.taskFilter;focusTaskId=null;render();return;}
   const duration=target.closest("[data-duration]");
-  if(duration){clearInterval(focusTimer.interval);focusTimer.interval=null;focusTimer.running=false;focusTimer.duration=Number(duration.dataset.duration)*60;focusTimer.seconds=focusTimer.duration;render();return;}
+  if(duration){selectDuration(Number(duration.dataset.duration));return;}
   const searchResult=target.closest("[data-search-kind]");
   if(searchResult){openSearchResult(searchResult.dataset.searchKind,searchResult.dataset.searchId);return;}
 }
 document.addEventListener("click",handleClick);
 $("#addButton").addEventListener("click",()=>openModal("chooser"));
-$("#searchButton").addEventListener("click",()=>{searchQuery="";openModal("search");});
+$("#searchButton").addEventListener("click",openSearch);
+$("#ambienceButton").addEventListener("click",toggleAmbiencePanel);
+$("#ambiencePlay").addEventListener("click",toggleAmbience);
+$("#ambiencePanel").addEventListener("click",event=>{
+  const scene=event.target.closest("[data-scene]");
+  if(scene)changeScene(scene.dataset.scene);
+});
+$("#ambienceVolume").addEventListener("input",event=>changeVolume(event.target.value));
+$("#homeAmbienceButton").addEventListener("click",()=>setAmbiencePanel(true));
+$("#settingsAmbienceButton")?.addEventListener("click",()=>{setAmbiencePanel(true);});
+document.addEventListener("pointerdown",event=>{
+  if(!event.target.closest(".ambience-wrap")&&!event.target.closest("#homeAmbienceButton")&&!event.target.closest("#settingsAmbienceButton"))setAmbiencePanel(false);
+});
 $("#modalLayer").addEventListener("click",event=>{if(event.target===$("#modalLayer"))closeModal();});
 $("#modalLayer").addEventListener("submit",event=>{
   if(event.target.id==="modalForm"){event.preventDefault();saveForm(event.target);}
@@ -399,35 +635,40 @@ $("#modalLayer").addEventListener("submit",event=>{
 $("#modalLayer").addEventListener("input",event=>{
   if(event.target.id==="searchInput"){searchQuery=event.target.value;drawSearchResults();}
 });
+$("#content").addEventListener("change",event=>{
+  if(event.target.id==="focusTaskSelect"){
+    focusTimer.taskId=event.target.value;
+    try{localStorage.setItem("nexus-focus-task",focusTimer.taskId);}catch(error){}
+  }
+});
 $("#content").addEventListener("submit",event=>{
   if(event.target.id==="quickTaskForm"){
     event.preventDefault();
     const input=$('input[name="quickTask"]',event.target);
     if(!input.value.trim())return;
-    data.tasks.unshift({id:id("task"),title:input.value.trim(),projectId:activeProjectId||null,done:false,created:Date.now()});
-    activity("Added a task","Task");
+    data.tasks.unshift({id:makeId("task"),title:input.value.trim(),projectId:activeProjectId||null,done:false,created:Date.now()});
+    saveData();
     render();
+    toast("Task added");
   }
 });
 $("#content").addEventListener("click",event=>{
-  if(event.target.id==="timerToggle")toggleTimer();
+  if(event.target.closest("#timerToggle")||event.target.closest("#persistentTimerToggle"))toggleTimer();
   if(event.target.id==="timerReset")resetTimer();
   if(event.target.id==="exportData")exportWorkspace();
   if(event.target.id==="resetData")resetWorkspace();
 });
-$("#projectCount").textContent=data.projects.length;
-$("#todayDate").textContent=new Date().toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}).toUpperCase();
 document.addEventListener("keydown",event=>{
   const typing=event.target.matches("input,textarea,select");
-  if(event.key==="Escape")closeModal();
-  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="k"){event.preventDefault();searchQuery="";openModal("search");}
+  if(event.key==="Escape"){closeModal();setAmbiencePanel(false);}
+  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="k"){event.preventDefault();openSearch();}
   if(!typing&&!event.ctrlKey&&!event.metaKey){
     const views={"1":"home","2":"projects","3":"tasks","4":"notes"};
     if(views[event.key])setView(views[event.key]);
   }
 });
+try{focusTimer.taskId=localStorage.getItem("nexus-focus-task")||"";}catch(error){}
+$("#todayDate").textContent=new Date().toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}).toUpperCase();
 render();
-try{
-  if(!localStorage.getItem("nexus-tour-complete"))setTimeout(()=>{if(!modalType){tourStep=0;openModal("tour");}},350);
-}catch(error){}
+syncAmbienceUI();
 })();
