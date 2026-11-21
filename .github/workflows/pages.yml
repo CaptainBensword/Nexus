@@ -35,7 +35,7 @@ jobs:
         run: |
           mkdir -p site/assets
           cp index.html styles.css app.js site/
-          cp assets/nexus-mark.svg assets/kit-head.svg site/assets/
+          cp assets/nexus-symbol.svg site/assets/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
