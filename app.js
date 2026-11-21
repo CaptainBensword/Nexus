@@ -26,6 +26,9 @@ function makeId(prefix){
 function clone(value){return JSON.parse(JSON.stringify(value));}
 function safeParse(value){try{return JSON.parse(value);}catch(error){return null;}}
 function loadData(){
+  try{
+    ["nexus-workspace-v3","nexus-workspace-v2","nexus-deck-v1","nexus-focus-task"].forEach(key=>localStorage.removeItem(key));
+  }catch(error){}
   const saved=safeParse(localStorage.getItem(STORAGE_KEY)||"");
   if(saved&&Array.isArray(saved.projects)&&Array.isArray(saved.tasks)&&Array.isArray(saved.notes)){
     return {
